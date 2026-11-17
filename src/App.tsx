@@ -1,0 +1,1294 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  INGREDIENTS,
+  Ingredient,
+  LEVELS,
+  makeOrder,
+  Mode,
+  STAGES,
+  STAGE_NAMES,
+  unlockedByLevel,
+} from "./data/config";
+import Griddle from "./components/Griddle";
+import CustomerPortrait from "./components/CustomerPortrait";
+import {
+  batterCoverage,
+  eggCoverage,
+  evaluate,
+  getStars,
+  newPancake,
+  Point,
+  Result,
+  Run,
+} from "./game/engine";
+import {
+  defaultSave,
+  exportSave,
+  importSave,
+  loadSave,
+  persistSave,
+  Save,
+  SAVE_KEY,
+} from "./systems/save";
+import { playSound, Sound } from "./systems/sound";
+
+type Screen = "menu" | "levels" | "shop" | "settings" | "achievements" | "game";
+const ACHIEVEMENTS = [
+  { id: "cilantro", title: "香菜毁灭者", hint: "连续给10位顾客加错香菜" },
+  { id: "dark", title: "黑暗料理大师", hint: "一份饼加入全部已开放食材" },
+  { id: "warrior", title: "铁锅战神", hint: "连续完成20个完美订单" },
+  { id: "lastsecond", title: "老板别急", hint: "顾客剩余耐心不足5秒时出餐" },
+  { id: "eggs", title: "鸡蛋自由", hint: "一份饼打入5个鸡蛋" },
+];
+const UPGRADE_INFO = [
+  {
+    id: "griddle" as const,
+    name: "宽心铁板",
+    desc: "最佳火候窗口更宽，容错更高",
+    base: 60,
+    icon: "◉",
+  },
+  {
+    id: "scraper" as const,
+    name: "顺手刮板",
+    desc: "每次拖动覆盖更多面糊",
+    base: 55,
+    icon: "◒",
+  },
+  {
+    id: "service" as const,
+    name: "利落出餐台",
+    desc: "顾客耐心增加，计时更宽松",
+    base: 65,
+    icon: "▱",
+  },
+];
+const SAUCES: Ingredient[] = ["sweet", "chili", "garlic"];
+const FILLINGS: Ingredient[] = [
+  "scallion",
+  "cilantro",
+  "crispy",
+  "ham",
+  "sesame",
+];
+const formatTime = (s: number) =>
+  `${Math.floor(Math.max(0, s) / 60)
+    .toString()
+    .padStart(2, "0")}:${Math.floor(Math.max(0, s) % 60)
+    .toString()
+    .padStart(2, "0")}`;
+
+function ticketText(wants: Partial<Record<Ingredient, number>>) {
+  return Object.entries(wants)
+    .filter(([, count]) => count && count > 0)
+    .map(
+      ([id, count]) =>
+        `${INGREDIENTS.find((i) => i.id === id)?.name ?? id}${count! > 1 ? ` ×${count}` : ""}`,
+    )
+    .join(" · ");
+}
+
+function startRun(mode: Mode, level: number, save: Save): Run {
+  const config = LEVELS[level - 1];
+  const first = mode === "free" ? null : makeOrder(level, 1, mode);
+  const boosted = first
+    ? { ...first, patience: first.patience + save.upgrades.service * 8 }
+    : null;
+  return {
+    mode,
+    level,
+    secondsLeft: mode === "level" ? config.seconds : Infinity,
+    elapsed: 0,
+    maxCustomers: mode === "level" ? config.customers : Infinity,
+    order: boosted,
+    customerWait: 0,
+    sequence: 1,
+    served: 0,
+    missed: 0,
+    revenue: 0,
+    perfect: 0,
+    wrong: 0,
+    satisfactionTotal: 0,
+    perfectStreak: 0,
+    bestPerfectStreak: 0,
+    pancake: newPancake(),
+    paused: false,
+    finished: false,
+    lastResult: null,
+    message: "先倒面糊，再按住铁板拖动刮板。",
+  };
+}
+
+export default function App() {
+  const [save, setSave] = useState<Save>(loadSave);
+  const [screen, setScreen] = useState<Screen>(
+    save.activeRun ? "game" : "menu",
+  );
+  const [run, setRun] = useState<Run | null>(save.activeRun);
+  const [toast, setToast] = useState<Result | null>(null);
+  const [notice, setNotice] = useState("");
+  const [batterPoured, setBatterPoured] = useState(
+    !!save.activeRun?.pancake.batter.length,
+  );
+  const [resetFirst, setResetFirst] = useState(false);
+  const [resetSecond, setResetSecond] = useState(false);
+  const importInput = useRef<HTMLInputElement>(null);
+  const completed = useRef(false);
+  const lastTick = useRef(performance.now());
+  const runRef = useRef(run);
+  runRef.current = run;
+  const sound = (kind: Sound) => playSound(kind, save.sound);
+  useEffect(() => persistSave(save), [save]);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = runRef.current;
+      setSave((s) =>
+        s.activeRun === current ? s : { ...s, activeRun: current },
+      );
+    }, 1500);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 3000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = performance.now();
+      const delta = Math.min(0.3, (now - lastTick.current) / 1000);
+      lastTick.current = now;
+      setRun((current) => {
+        if (!current || current.paused || current.finished) return current;
+        const secondsLeft =
+          current.mode === "level" ? current.secondsLeft - delta : Infinity;
+        const wait = current.order ? current.customerWait + delta : 0;
+        const pancake = {
+          ...current.pancake,
+          elapsed: current.pancake.elapsed + delta,
+          heat:
+            current.pancake.stage === "flip"
+              ? current.pancake.heat + delta * 7.5
+              : current.pancake.heat,
+        };
+        if (secondsLeft <= 0)
+          return {
+            ...current,
+            secondsLeft: 0,
+            elapsed: current.elapsed + delta,
+            pancake,
+            finished: true,
+            message: "营业时间到！",
+          };
+        if (current.order && wait >= current.order.patience) {
+          const missed = current.missed + 1,
+            sequence = current.sequence + 1;
+          const finished =
+            current.mode === "level"
+              ? missed + current.served >= current.maxCustomers
+              : missed >= 3;
+          const next = finished
+            ? null
+            : makeOrder(
+                current.mode === "endless"
+                  ? Math.min(10, 1 + Math.floor(sequence / 3))
+                  : current.level,
+                sequence,
+                current.mode,
+              );
+          return {
+            ...current,
+            secondsLeft,
+            elapsed: current.elapsed + delta,
+            missed,
+            sequence,
+            order: next
+              ? { ...next, patience: next.patience + save.upgrades.service * 8 }
+              : null,
+            customerWait: 0,
+            pancake: newPancake(),
+            perfectStreak: 0,
+            finished,
+            message: finished
+              ? "收摊了，看看今天的成绩。"
+              : "顾客等不及走了！下一位已经排上。",
+          };
+        }
+        return {
+          ...current,
+          secondsLeft,
+          elapsed: current.elapsed + delta,
+          customerWait: wait,
+          pancake,
+        };
+      });
+    }, 100);
+    return () => clearInterval(timer);
+  }, [save.upgrades.service]);
+
+  useEffect(() => {
+    if (!run?.finished || completed.current) return;
+    completed.current = true;
+    if (run.mode === "level") {
+      const stars = getStars(run);
+      setSave((s) => ({
+        ...s,
+        unlockedLevel:
+          stars > 0
+            ? Math.min(10, Math.max(s.unlockedLevel, run.level + 1))
+            : s.unlockedLevel,
+        stars: {
+          ...s.stars,
+          [run.level]: Math.max(s.stars[run.level] ?? 0, stars),
+        },
+        ingredients: Array.from(
+          new Set([
+            ...s.ingredients,
+            ...unlockedByLevel(
+              stars > 0 ? Math.min(10, run.level + 1) : s.unlockedLevel,
+            ),
+          ]),
+        ),
+      }));
+    }
+    if (run.mode === "endless")
+      setSave((s) => ({
+        ...s,
+        endless: {
+          revenue: Math.max(s.endless.revenue, run.revenue),
+          served: Math.max(s.endless.served, run.served),
+          perfectStreak: Math.max(
+            s.endless.perfectStreak,
+            run.bestPerfectStreak,
+          ),
+        },
+      }));
+  }, [run?.finished]);
+
+  const launch = (mode: Mode, level: number) => {
+    completed.current = false;
+    setToast(null);
+    setBatterPoured(false);
+    const started = startRun(mode, level, save);
+    runRef.current = started;
+    setRun(started);
+    setScreen("game");
+    lastTick.current = performance.now();
+  };
+  const backToMenu = () => {
+    runRef.current = null;
+    setRun(null);
+    setSave((s) => ({ ...s, activeRun: null }));
+    setToast(null);
+    setScreen("menu");
+  };
+  const paint = (point: Point) =>
+    setRun((r) => {
+      if (!r || r.paused) return r;
+      const p = r.pancake;
+      if (p.stage === "spread" && batterPoured)
+        return { ...r, pancake: { ...p, batter: [...p.batter, point] } };
+      if (p.stage === "egg" && p.eggs > 0)
+        return { ...r, pancake: { ...p, eggPaint: [...p.eggPaint, point] } };
+      return r;
+    });
+  const fold = (side: "left" | "right") =>
+    setRun((r) =>
+      r && r.pancake.stage === "fold" && !r.pancake.folds.includes(side)
+        ? {
+            ...r,
+            pancake: { ...r.pancake, folds: [...r.pancake.folds, side] },
+            message:
+              side === "left"
+                ? "左边收好了，再折右边。"
+                : "右边收好了，再折左边。",
+          }
+        : r,
+    );
+  const updatePancake = (
+    patch: Partial<Run["pancake"]>,
+    message: string,
+    sfx?: Sound,
+  ) => {
+    setRun((r) =>
+      r ? { ...r, pancake: { ...r.pancake, ...patch }, message } : r,
+    );
+    if (sfx) sound(sfx);
+  };
+  const nextStage = () => {
+    if (!run) return;
+    const p = run.pancake,
+      index = STAGES.indexOf(p.stage);
+    if (
+      p.stage === "spread" &&
+      batterCoverage(p, save.upgrades.scraper) < 0.38
+    ) {
+      setNotice("面糊还没摊开，继续拖动刮板。");
+      return;
+    }
+    if (p.stage === "egg" && (p.eggs < 1 || eggCoverage(p) < 0.28)) {
+      setNotice("先打蛋，再拖动蛋液铺开。");
+      return;
+    }
+    if (p.stage === "fold" && p.folds.length < 2) {
+      setNotice("从左右饼边向中心各拖一次。");
+      return;
+    }
+    if (p.stage === "flip") {
+      updatePancake(
+        { stage: "sauce", flipHeat: p.heat },
+        "按订单刷酱。每点一次增加一份。",
+        "flip",
+      );
+      return;
+    }
+    const next = STAGES[index + 1];
+    if (next)
+      updatePancake(
+        { stage: next },
+        {
+          spread: "倒入面糊，在铁板上摊开。",
+          egg: "点鸡蛋打入铁板，再拖动蛋液。",
+          flip: "观察火候条，在绿色区间翻面。",
+          sauce: "按订单刷酱。每点一次增加一份。",
+          fill: "按订单加入配料。需要加倍就点两次。",
+          fold: "从左右饼边分别拖向中心。",
+          bag: "点击装袋，把煎饼交给顾客。",
+        }[next],
+        next === "fold" ? "fold" : undefined,
+      );
+  };
+  const addIngredient = (id: Ingredient) => {
+    if (!run) return;
+    const p = run.pancake;
+    if (p.stage === "egg" && id === "egg") {
+      if (p.eggs >= 5) return;
+      updatePancake(
+        { eggs: p.eggs + 1 },
+        `已打入 ${p.eggs + 1} 个鸡蛋，拖动涂匀。`,
+        "egg",
+      );
+      return;
+    }
+    if (p.stage === "sauce" && SAUCES.includes(id)) {
+      updatePancake(
+        { sauces: { ...p.sauces, [id]: Math.min(3, (p.sauces[id] ?? 0) + 1) } },
+        "酱料已经刷上，检查订单用量。",
+        "sauce",
+      );
+      return;
+    }
+    if (p.stage === "fill" && FILLINGS.includes(id)) {
+      updatePancake(
+        {
+          fillings: {
+            ...p.fillings,
+            [id]: Math.min(3, (p.fillings[id] ?? 0) + 1),
+          },
+        },
+        "配料已入锅，继续加料或折叠。",
+        "scrape",
+      );
+    }
+  };
+  const serve = () => {
+    if (!run || run.pancake.stage !== "bag") return;
+    const result = evaluate(
+      run.pancake,
+      run.order,
+      run.customerWait,
+      run.mode,
+      save.upgrades.griddle,
+      save.upgrades.scraper,
+    );
+    sound(result.wrong ? "sad" : "happy");
+    sound("bag");
+    const allAvailable = INGREDIENTS.filter(
+      (i) => save.ingredients.includes(i.id) || run.mode === "free",
+    ).map((i) => i.id);
+    const actual = {
+      ...run.pancake.fillings,
+      ...run.pancake.sauces,
+      egg: run.pancake.eggs,
+    };
+    const newAchievements = new Set(save.achievements);
+    const cilantroStreak = result.cilantroError
+      ? save.cilantroMistakeStreak + 1
+      : 0;
+    const perfectStreak = result.perfect ? save.perfectStreak + 1 : 0;
+    if (cilantroStreak >= 10) newAchievements.add("cilantro");
+    if (allAvailable.every((id) => (actual[id] ?? 0) > 0))
+      newAchievements.add("dark");
+    if (perfectStreak >= 20) newAchievements.add("warrior");
+    if (run.order && run.order.patience - run.customerWait < 5)
+      newAchievements.add("lastsecond");
+    if (run.pancake.eggs >= 5) newAchievements.add("eggs");
+    setSave((s) => ({
+      ...s,
+      coins: s.coins + result.revenue,
+      achievements: [...newAchievements],
+      cilantroMistakeStreak: cilantroStreak,
+      perfectStreak,
+    }));
+    setToast(result);
+    const served = run.served + 1,
+      sequence = run.sequence + 1;
+    const finished =
+      run.mode === "level" && served + run.missed >= run.maxCustomers;
+    const next =
+      finished || run.mode === "free"
+        ? null
+        : makeOrder(
+            run.mode === "endless"
+              ? Math.min(10, 1 + Math.floor(sequence / 3))
+              : run.level,
+            sequence,
+            run.mode,
+          );
+    setRun({
+      ...run,
+      served,
+      sequence,
+      revenue: run.revenue + result.revenue,
+      perfect: run.perfect + (result.perfect ? 1 : 0),
+      wrong: run.wrong + (result.wrong ? 1 : 0),
+      satisfactionTotal: run.satisfactionTotal + result.satisfaction,
+      perfectStreak: result.perfect ? run.perfectStreak + 1 : 0,
+      bestPerfectStreak: Math.max(
+        run.bestPerfectStreak,
+        result.perfect ? run.perfectStreak + 1 : 0,
+      ),
+      order: next
+        ? { ...next, patience: next.patience + save.upgrades.service * 8 }
+        : null,
+      customerWait: 0,
+      pancake: newPancake(),
+      paused: true,
+      finished,
+      lastResult: result,
+      message: "新的一份，从倒面糊开始。",
+    });
+    setBatterPoured(false);
+  };
+  const continueAfterResult = () => {
+    setToast(null);
+    if (run?.mode === "free") {
+      setRun((r) => (r ? { ...r, paused: false, pancake: newPancake() } : r));
+    } else setRun((r) => (r ? { ...r, paused: false } : r));
+  };
+  const buyUpgrade = (id: "griddle" | "scraper" | "service", base: number) => {
+    const level = save.upgrades[id],
+      price = base * (level + 1);
+    if (level >= 3 || save.coins < price) {
+      setNotice(level >= 3 ? "已经升级到最高级。" : "金币不够，再多卖几份！");
+      return;
+    }
+    setSave((s) => ({
+      ...s,
+      coins: s.coins - price,
+      upgrades: { ...s.upgrades, [id]: level + 1 },
+    }));
+    sound("bag");
+  };
+  const buyIngredient = (id: Ingredient, cost: number) => {
+    if (save.coins < cost) {
+      setNotice("金币不够，再多卖几份！");
+      return;
+    }
+    setSave((s) => ({
+      ...s,
+      coins: s.coins - cost,
+      ingredients: [...s.ingredients, id],
+    }));
+    sound("bag");
+  };
+  const importFile = async (file?: File) => {
+    if (!file) return;
+    try {
+      const imported = importSave(await file.text());
+      setSave(imported);
+      if (imported.activeRun) {
+        setRun(imported.activeRun);
+        setBatterPoured(!!imported.activeRun.pancake.batter.length);
+        setScreen("game");
+      }
+      setNotice("存档导入成功。");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "导入失败");
+    }
+    if (importInput.current) importInput.current.value = "";
+  };
+  const confirmReset = () => {
+    if (!resetFirst) {
+      setResetFirst(true);
+      return;
+    }
+    if (!resetSecond) {
+      setResetSecond(true);
+      return;
+    }
+    localStorage.removeItem(SAVE_KEY);
+    setSave(defaultSave());
+    setResetFirst(false);
+    setResetSecond(false);
+    setNotice("存档已重置。");
+  };
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <button className="brand" onClick={backToMenu}>
+          <span className="brand-stamp">饼</span>
+          <span>
+            <strong>煎饼果子模拟器</strong>
+            <small>JIANBING SIMULATOR · 早市开张</small>
+          </span>
+        </button>
+        <div className="topbar-right">
+          <span className="coin-display">
+            <span className="coin-icon">¥</span> {save.coins}{" "}
+            <small>金币</small>
+          </span>
+          {screen !== "menu" && (
+            <button className="subtle-button" onClick={backToMenu}>
+              返回摊位
+            </button>
+          )}
+        </div>
+      </header>
+      {screen === "menu" && (
+        <main className="menu-page">
+          <div className="menu-hero">
+            <div className="hero-text">
+              <p className="eyebrow">一张饼，一座城的清晨</p>
+              <h1>
+                趁热乎，
+                <br />
+                <em>开张了！</em>
+              </h1>
+              <p className="hero-description">
+                倒面糊、摊圆饼、看火候、听顾客催单。
+                <br />
+                从街边小摊开始，练成街角的煎饼传说。
+              </p>
+              <div className="hero-actions">
+                <button
+                  className="primary-button"
+                  onClick={() => setScreen("levels")}
+                >
+                  开始营业 <span>↗</span>
+                </button>
+                <button
+                  className="outline-button"
+                  onClick={() => launch("free", save.unlockedLevel)}
+                >
+                  先练练手
+                </button>
+              </div>
+              <p className="hero-note">
+                已解锁第 {save.unlockedLevel} 关 · 累计{" "}
+                {Object.values(save.stars).reduce((a, b) => a + b, 0)} 颗星
+              </p>
+            </div>
+            <div className="hero-art" aria-hidden="true">
+              {save.decoration && <div className="red-lantern">福</div>}
+              <div className="awning">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+              <div className="signboard">
+                老张煎饼铺 <small>现摊现做 · 香飘一条街</small>
+              </div>
+              <div className="hero-pan">
+                <div className="hero-pancake">
+                  <div className="hero-egg" />
+                  <span className="hero-herbs">✳ ✳ ✳</span>
+                  <div className="hero-crisp" />
+                </div>
+              </div>
+              <div className="hero-steam">⌇　⌇　⌇</div>
+              <div className="art-counter" />
+            </div>
+          </div>
+          <div className="mode-grid">
+            <button onClick={() => setScreen("levels")}>
+              <b>01 / 主线闯关</b>
+              <strong>从小摊到商业街</strong>
+              <span>十个清晨，十场硬仗　→</span>
+            </button>
+            <button onClick={() => launch("endless", save.unlockedLevel)}>
+              <b>02 / 无尽经营</b>
+              <strong>今天能卖多少份？</strong>
+              <span>顾客会越来越没耐心　→</span>
+            </button>
+            <button onClick={() => launch("free", save.unlockedLevel)}>
+              <b>03 / 自由制作</b>
+              <strong>想加什么就加什么</strong>
+              <span>没有计时，只有手艺　→</span>
+            </button>
+          </div>
+          <nav className="menu-links">
+            <button onClick={() => setScreen("shop")}>摊位商店 ↗</button>
+            <button onClick={() => setScreen("achievements")}>
+              隐藏成就 ↗
+            </button>
+            <button onClick={() => setScreen("settings")}>游戏设置 ↗</button>
+          </nav>
+        </main>
+      )}
+      {screen === "levels" && (
+        <main className="page-container">
+          <div className="page-heading">
+            <p className="eyebrow">营业日程 / 10 个关卡</p>
+            <h1>每个清晨，都有新故事。</h1>
+            <p>完成营业额目标即可通关。更高营业额与零流失，能拿到更多星星。</p>
+          </div>
+          <div className="levels-grid">
+            {LEVELS.map((level) => {
+              const locked = level.id > save.unlockedLevel;
+              return (
+                <button
+                  key={level.id}
+                  disabled={locked}
+                  className={`level-card ${locked ? "locked" : ""}`}
+                  onClick={() => launch("level", level.id)}
+                >
+                  <span className="level-num">
+                    {String(level.id).padStart(2, "0")}
+                  </span>
+                  <span className="level-area">{level.area}</span>
+                  <strong>{level.title}</strong>
+                  <span className="level-meta">
+                    {level.customers} 位顾客 · {formatTime(level.seconds)} ·
+                    目标 ¥{level.target}
+                  </span>
+                  <span className="level-special">
+                    {locked ? "🔒 尚未解锁" : level.special}
+                  </span>
+                  <span className="stars">
+                    {Array.from({ length: 3 }, (_, i) =>
+                      i < (save.stars[level.id] ?? 0) ? "★" : "☆",
+                    ).join("")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </main>
+      )}
+      {screen === "shop" && (
+        <main className="page-container">
+          <div className="page-heading">
+            <p className="eyebrow">摊位商店 / COINS ¥{save.coins}</p>
+            <h1>好手艺，也需要好家伙。</h1>
+            <p>升级设备，让忙碌的早晨从容一点。每项最多升级三级。</p>
+          </div>
+          <div className="shop-grid">
+            {UPGRADE_INFO.map((item) => {
+              const level = save.upgrades[item.id],
+                price = item.base * (level + 1);
+              return (
+                <article className="shop-card" key={item.id}>
+                  <div className="shop-icon">{item.icon}</div>
+                  <small>设备升级 · {level}/3</small>
+                  <h2>{item.name}</h2>
+                  <p>{item.desc}</p>
+                  <button
+                    onClick={() => buyUpgrade(item.id, item.base)}
+                    disabled={level >= 3}
+                  >
+                    {level >= 3 ? "已升满" : `升级 · ¥${price}`}
+                  </button>
+                </article>
+              );
+            })}
+            <article className="shop-card">
+              <div className="shop-icon">❖</div>
+              <small>摊位装饰</small>
+              <h2>红灯笼</h2>
+              <p>给小摊添点喜气。菜单摊位将挂起一盏灯笼。</p>
+              <button
+                disabled={save.decoration}
+                onClick={() => {
+                  if (save.coins < 90) return setNotice("金币不够。");
+                  setSave((s) => ({
+                    ...s,
+                    coins: s.coins - 90,
+                    decoration: true,
+                  }));
+                }}
+              >
+                {save.decoration ? "已装饰" : "购买 · ¥90"}
+              </button>
+            </article>
+          </div>
+          <h2 className="section-title">新食材</h2>
+          <div className="ingredient-shop">
+            {INGREDIENTS.filter((i) => i.cost > 0).map((i) => (
+              <article key={i.id}>
+                <span
+                  className="ingredient-icon"
+                  style={{ background: i.color }}
+                >
+                  {i.icon}
+                </span>
+                <div>
+                  <strong>{i.name}</strong>
+                  <small>通关第 {i.unlockLevel - 1} 关后开放购买</small>
+                </div>
+                <button
+                  disabled={
+                    save.ingredients.includes(i.id) ||
+                    save.unlockedLevel < i.unlockLevel
+                  }
+                  onClick={() => buyIngredient(i.id, i.cost)}
+                >
+                  {save.ingredients.includes(i.id) ? "已解锁" : `¥${i.cost}`}
+                </button>
+              </article>
+            ))}
+          </div>
+        </main>
+      )}
+      {screen === "achievements" && (
+        <main className="page-container">
+          <div className="page-heading">
+            <p className="eyebrow">街角传闻 / {save.achievements.length} / 5</p>
+            <h1>总有些事，值得贴在摊位上。</h1>
+          </div>
+          <div className="achievement-grid">
+            {ACHIEVEMENTS.map((a, i) => (
+              <article
+                className={save.achievements.includes(a.id) ? "earned" : ""}
+                key={a.id}
+              >
+                <span>{save.achievements.includes(a.id) ? "★" : "◇"}</span>
+                <small>成就 {String(i + 1).padStart(2, "0")}</small>
+                <h2>{a.title}</h2>
+                <p>{a.hint}</p>
+                <b>
+                  {save.achievements.includes(a.id) ? "已达成" : "尚未达成"}
+                </b>
+              </article>
+            ))}
+          </div>
+        </main>
+      )}
+      {screen === "settings" && (
+        <main className="page-container settings-page">
+          <div className="page-heading">
+            <p className="eyebrow">摊主手册 / SETTINGS</p>
+            <h1>开摊前，再看一眼。</h1>
+          </div>
+          <section className="settings-panel">
+            <h2>音效</h2>
+            <p>铁板的滋滋声与顾客反馈由浏览器合成。</p>
+            <button
+              className="outline-button"
+              onClick={() => setSave((s) => ({ ...s, sound: !s.sound }))}
+            >
+              音效：{save.sound ? "开启" : "关闭"}
+            </button>
+          </section>
+          <section className="settings-panel">
+            <h2>本地存档</h2>
+            <p>
+              进度自动保存在当前浏览器。可导出 JSON 备份，并在其他浏览器导入。
+            </p>
+            <div className="settings-actions">
+              <button
+                className="outline-button"
+                onClick={() => exportSave(save)}
+              >
+                导出存档
+              </button>
+              <button
+                className="outline-button"
+                onClick={() => importInput.current?.click()}
+              >
+                导入存档
+              </button>
+              <input
+                ref={importInput}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(e) => void importFile(e.target.files?.[0])}
+              />
+            </div>
+            <button className="danger-button" onClick={confirmReset}>
+              {resetSecond
+                ? "第二次确认：永久清空存档"
+                : resetFirst
+                  ? "确认重置？请再点一次"
+                  : "重置存档"}
+            </button>
+            {(resetFirst || resetSecond) && (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setResetFirst(false);
+                  setResetSecond(false);
+                }}
+              >
+                取消重置
+              </button>
+            )}
+          </section>
+          <section className="settings-panel">
+            <h2>怎么做一份饼</h2>
+            <ol>
+              <li>倒面糊，在铁板上按住拖动刮板，尽量摊满圆面。</li>
+              <li>点击鸡蛋，再拖动涂开。可多打蛋，但按订单来。</li>
+              <li>盯住火候，在绿色区间翻面。</li>
+              <li>点击酱料和配料；加倍要求需要点两次。</li>
+              <li>从左右饼边各拖向中心一次，折好后装袋。</li>
+            </ol>
+          </section>
+        </main>
+      )}
+      {screen === "game" && run && (
+        <main className="game-page">
+          <div className="game-hud">
+            <div>
+              <small>当前营业</small>
+              <strong>
+                {run.mode === "level"
+                  ? `${String(run.level).padStart(2, "0")} · ${LEVELS[run.level - 1].title}`
+                  : run.mode === "endless"
+                    ? "无尽经营"
+                    : "自由制作"}
+              </strong>
+            </div>
+            <div>
+              <small>营业倒计时</small>
+              <strong className={run.secondsLeft < 30 ? "urgent" : ""}>
+                {run.mode === "level"
+                  ? formatTime(run.secondsLeft)
+                  : run.mode === "endless"
+                    ? formatTime(run.elapsed)
+                    : "不限时"}
+              </strong>
+            </div>
+            <div>
+              <small>今日营业额</small>
+              <strong>
+                ¥{run.revenue}{" "}
+                {run.mode === "level" && (
+                  <span className="hud-sub">
+                    / ¥{LEVELS[run.level - 1].target}
+                  </span>
+                )}
+              </strong>
+            </div>
+            <div>
+              <small>完成 / 流失</small>
+              <strong>
+                {run.served} / {run.missed}
+              </strong>
+            </div>
+            <button
+              className="pause-button"
+              onClick={() =>
+                setRun((r) => (r ? { ...r, paused: !r.paused } : r))
+              }
+            >
+              {run.paused ? "继续" : "暂停"} Ⅱ
+            </button>
+          </div>
+          <div className="game-layout">
+            <aside className="customer-panel">
+              {run.order ? (
+                <>
+                  <div className="customer-stage">
+                    <CustomerPortrait
+                      customer={run.order.customer}
+                      angry={run.customerWait / run.order.patience > 0.72}
+                    />
+                    <div className="speech">“{run.order.customer.line}”</div>
+                  </div>
+                  <div className="customer-details">
+                    <small>正在等待 · 第 {run.sequence} 位</small>
+                    <h2>{run.order.customer.name}</h2>
+                    <div className="patience-label">
+                      <span>耐心</span>
+                      <b>
+                        {Math.ceil(
+                          Math.max(0, run.order.patience - run.customerWait),
+                        )}{" "}
+                        秒
+                      </b>
+                    </div>
+                    <div className="patience-bar">
+                      <i
+                        style={{
+                          width: `${Math.max(0, 100 * (1 - run.customerWait / run.order.patience))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="ticket">
+                      <div className="ticket-top">
+                        <b>今日小票</b>
+                        <span>NO. {String(run.order.id).padStart(3, "0")}</span>
+                      </div>
+                      <p>{ticketText(run.order.wants)}</p>
+                      {run.order.notes.map((note) => (
+                        <strong key={note}>⚑ {note}</strong>
+                      ))}
+                      <div className="ticket-price">
+                        应收 <b>¥{run.order.price}</b>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="free-customer">
+                  <span>◌</span>
+                  <h2>自由发挥</h2>
+                  <p>没有催单，尽情研究你的招牌配方。</p>
+                </div>
+              )}
+            </aside>
+            <section className="workstation">
+              <div className="work-top">
+                <span className="eyebrow">铁板工作台 / LIVE COOKING</span>
+                <span className="work-status">● 正在制作</span>
+              </div>
+              <div className="stage-track">
+                {STAGES.map((stage, i) => (
+                  <div
+                    key={stage}
+                    className={`${i < STAGES.indexOf(run.pancake.stage) ? "done" : ""} ${stage === run.pancake.stage ? "active" : ""}`}
+                  >
+                    <span>{i + 1}</span>
+                    <small>{STAGE_NAMES[stage]}</small>
+                  </div>
+                ))}
+              </div>
+              <div className="griddle-zone">
+                <Griddle
+                  pancake={run.pancake}
+                  onPaint={paint}
+                  onFold={fold}
+                  scraper={save.upgrades.scraper}
+                />
+              </div>
+              <div className="work-instruction">
+                <b>
+                  {STAGE_NAMES[run.pancake.stage]} · {run.message}
+                </b>
+                {run.pancake.stage === "spread" && (
+                  <small>
+                    覆盖{" "}
+                    {Math.round(
+                      batterCoverage(run.pancake, save.upgrades.scraper) * 100,
+                    )}
+                    % · 用鼠标或手指画圈
+                  </small>
+                )}
+                {run.pancake.stage === "egg" && (
+                  <small>
+                    蛋液覆盖 {Math.round(eggCoverage(run.pancake) * 100)}% ·
+                    已打 {run.pancake.eggs} 个
+                  </small>
+                )}
+                {run.pancake.stage === "flip" && (
+                  <div className="heat-meter">
+                    <div>
+                      <span>火候 {Math.round(run.pancake.heat)}%</span>
+                      <span>最佳区间 48–78%</span>
+                    </div>
+                    <div className="heat-track">
+                      <i
+                        style={{ width: `${Math.min(100, run.pancake.heat)}%` }}
+                      />
+                      <em />
+                    </div>
+                  </div>
+                )}
+                {run.pancake.stage === "fold" && (
+                  <small>已折 {run.pancake.folds.length} / 2 边</small>
+                )}
+              </div>
+            </section>
+            <aside className="tools-panel">
+              <div className="tools-heading">
+                <small>你的操作</small>
+                <h2>{STAGE_NAMES[run.pancake.stage]}</h2>
+              </div>
+              {run.pancake.stage === "spread" && (
+                <>
+                  <p>先倒一勺面糊，再按住铁板拖动刮板。</p>
+                  {run.mode === "free" && (
+                    <div className="batter-choice" aria-label="选择面糊">
+                      {(
+                        [
+                          ["classic", "原味面糊"],
+                          ["grain", "杂粮面糊"],
+                          ["purple", "紫米面糊"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          disabled={batterPoured}
+                          className={
+                            run.pancake.batterType === id ? "selected" : ""
+                          }
+                          onClick={() =>
+                            updatePancake(
+                              { batterType: id },
+                              `已选${label}，倒面糊后画圈摊开。`,
+                            )
+                          }
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    className="tool-main"
+                    disabled={batterPoured}
+                    onClick={() => {
+                      setBatterPoured(true);
+                      sound("pour");
+                    }}
+                  >
+                    ◉ {batterPoured ? "面糊已倒入" : "倒入面糊"}
+                  </button>
+                </>
+              )}
+              {run.pancake.stage === "egg" && (
+                <>
+                  <p>点击鸡蛋打入；在饼面拖动涂匀。</p>
+                  <button
+                    className="tool-main"
+                    onClick={() => addIngredient("egg")}
+                  >
+                    ◉ 打一个鸡蛋 <small>已打 {run.pancake.eggs}/5</small>
+                  </button>
+                </>
+              )}
+              {run.pancake.stage === "flip" && (
+                <p>绿色区间翻面最香。过早会夹生，过晚会焦。</p>
+              )}
+              {run.pancake.stage === "sauce" && (
+                <>
+                  <p>按小票选择酱料，点一次是一份。</p>
+                  <div className="tool-grid">
+                    {SAUCES.filter(
+                      (id) =>
+                        save.ingredients.includes(id) || run.mode === "free",
+                    ).map((id) => {
+                      const item = INGREDIENTS.find((i) => i.id === id)!;
+                      return (
+                        <button key={id} onClick={() => addIngredient(id)}>
+                          <i style={{ background: item.color }}>{item.icon}</i>
+                          <span>{item.name}</span>
+                          <b>×{run.pancake.sauces[id] ?? 0}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+              {run.pancake.stage === "fill" && (
+                <>
+                  <p>按小票加料。多加要求需要点击两次。</p>
+                  <div className="tool-grid">
+                    {FILLINGS.filter(
+                      (id) =>
+                        save.ingredients.includes(id) || run.mode === "free",
+                    ).map((id) => {
+                      const item = INGREDIENTS.find((i) => i.id === id)!;
+                      return (
+                        <button key={id} onClick={() => addIngredient(id)}>
+                          <i style={{ background: item.color }}>{item.icon}</i>
+                          <span>{item.name}</span>
+                          <b>×{run.pancake.fillings[id] ?? 0}</b>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+              {run.pancake.stage === "fold" && (
+                <p>在铁板上，从左右饼边向中心各拖一次。</p>
+              )}
+              {run.pancake.stage === "bag" && (
+                <p>最后一步。装袋后顾客会按速度、手艺和订单准确度给出评价。</p>
+              )}
+              <div className="tool-bottom">
+                {run.pancake.stage === "bag" ? (
+                  <button className="primary-button" onClick={serve}>
+                    装袋出餐 ↗
+                  </button>
+                ) : (
+                  <button className="primary-button" onClick={nextStage}>
+                    {run.pancake.stage === "flip"
+                      ? "现在翻面 ↗"
+                      : run.pancake.stage === "fold"
+                        ? "折好了，装袋 ↗"
+                        : `下一步：${STAGE_NAMES[STAGES[STAGES.indexOf(run.pancake.stage) + 1]]} ↗`}
+                  </button>
+                )}
+                <button
+                  className="text-button"
+                  onClick={() => {
+                    setBatterPoured(false);
+                    updatePancake(newPancake(), "这份重新做。先倒面糊。");
+                  }}
+                >
+                  重做这份
+                </button>
+              </div>
+            </aside>
+          </div>
+          {run.paused && !toast && !run.finished && (
+            <div className="modal-backdrop">
+              <div className="modal-card">
+                <p className="eyebrow">暂时歇口气</p>
+                <h2>铁板先关小火。</h2>
+                <p>营业时间和顾客耐心都已暂停。</p>
+                <div className="modal-actions">
+                  <button
+                    className="primary-button"
+                    onClick={() =>
+                      setRun((r) => (r ? { ...r, paused: false } : r))
+                    }
+                  >
+                    继续营业
+                  </button>
+                  <button className="outline-button" onClick={backToMenu}>
+                    返回主菜单
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {toast && (
+            <div className="modal-backdrop">
+              <div className="modal-card result-card">
+                <p className="eyebrow">出餐评价 / ORDER COMPLETE</p>
+                <div className="result-score">
+                  {toast.score}
+                  <small>分</small>
+                </div>
+                <h2>{toast.feedback}</h2>
+                <div className="result-details">
+                  {toast.details.map((detail) => (
+                    <span key={detail}>{detail}</span>
+                  ))}
+                </div>
+                {run.mode !== "free" && (
+                  <p className="result-money">
+                    营业额 +¥{toast.revenue} · 满意度 {toast.satisfaction}%
+                  </p>
+                )}
+                <button
+                  className="primary-button"
+                  onClick={continueAfterResult}
+                >
+                  {run.mode === "free"
+                    ? "再做一份"
+                    : run.finished
+                      ? "查看今日结算"
+                      : "接待下一位"}{" "}
+                  ↗
+                </button>
+              </div>
+            </div>
+          )}
+          {run.finished && !toast && (
+            <div className="modal-backdrop">
+              <div className="modal-card summary-card">
+                <p className="eyebrow">
+                  {run.mode === "endless"
+                    ? "无尽经营结束"
+                    : "今日收摊 / DAILY REPORT"}
+                </p>
+                <h2>
+                  {run.mode === "level"
+                    ? getStars(run) > 0
+                      ? "今天，卖得漂亮！"
+                      : "明天早点开张！"
+                    : "今天的铁板辛苦了。"}
+                </h2>
+                {run.mode === "level" && (
+                  <div className="summary-stars">
+                    {Array.from({ length: 3 }, (_, i) =>
+                      i < getStars(run) ? "★" : "☆",
+                    ).join("")}
+                  </div>
+                )}
+                <div className="summary-grid">
+                  <div>
+                    <small>营业额</small>
+                    <strong>¥{run.revenue}</strong>
+                  </div>
+                  <div>
+                    <small>完成订单</small>
+                    <strong>{run.served}</strong>
+                  </div>
+                  <div>
+                    <small>完美订单</small>
+                    <strong>{run.perfect}</strong>
+                  </div>
+                  <div>
+                    <small>错误订单</small>
+                    <strong>{run.wrong}</strong>
+                  </div>
+                  <div>
+                    <small>平均满意度</small>
+                    <strong>
+                      {run.served
+                        ? Math.round(run.satisfactionTotal / run.served)
+                        : 0}
+                      %
+                    </strong>
+                  </div>
+                  <div>
+                    <small>获得金币</small>
+                    <strong>¥{run.revenue}</strong>
+                  </div>
+                </div>
+                {run.mode === "endless" && (
+                  <p>
+                    历史最佳：¥{save.endless.revenue} · 接待{" "}
+                    {save.endless.served} 人 · 连续完美{" "}
+                    {save.endless.perfectStreak} 单
+                  </p>
+                )}
+                <div className="modal-actions">
+                  <button className="primary-button" onClick={backToMenu}>
+                    返回摊位
+                  </button>
+                  <button
+                    className="outline-button"
+                    onClick={() => launch(run.mode, run.level)}
+                  >
+                    再来一局
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      )}
+      {notice && (
+        <div className="toast-notice" role="status">
+          {notice}
+        </div>
+      )}
+      <footer className="site-footer">
+        <span>天亮了，铁板热了，故事开始了。</span>
+        <span>© 老张煎饼铺 · 本地单机游戏</span>
+      </footer>
+    </div>
+  );
+}
