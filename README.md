@@ -65,6 +65,7 @@ tests/           浏览器实际操作脚本
 | 火候影响评分             | 评分函数按翻面火候计算；实测在绿色区间翻面                        |
 | 订单与错误配料影响满意度 | 小票要求与实际用量逐项比较，禁忌香菜额外扣分                      |
 | 关卡结算、星级、解锁     | `tests/level-and-mobile.mjs` 完成第一关两单、出现星级并解锁第二关 |
+| 十关配置                 | `tests/levels-smoke.mjs` 逐关进入并验证顾客订单                   |
 | 金币累计、消费、升级     | 通关获得金币；`tests/save-and-endless.mjs` 实测消费并刷新保留     |
 | 无尽模式结束与纪录       | 同上，实测三位顾客流失后结算并保存最高纪录                        |
 | 自由制作                 | `tests/playthrough.mjs` 实测自由搭配与评价                        |
@@ -77,6 +78,7 @@ tests/           浏览器实际操作脚本
 node tests/playthrough.mjs
 node tests/level-and-mobile.mjs
 node tests/save-and-endless.mjs
+node tests/levels-smoke.mjs
 ```
 
 `playthrough.mjs` 可通过 `TEST_BASE_URL` 指向已部署网址；已对 GitHub Pages 版本执行完整出餐测试。
