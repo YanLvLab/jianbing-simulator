@@ -9,7 +9,7 @@ const page = await browser.newPage({
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
 });
-const base = "http://localhost:5179/";
+const base = process.env.TEST_BASE_URL ?? "http://localhost:5179/";
 try {
   await page.goto(base);
   await page.getByRole("button", { name: "先练练手" }).click();

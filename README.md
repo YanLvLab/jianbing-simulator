@@ -2,6 +2,8 @@
 
 一款可以直接在浏览器里玩的中文街头早餐摊游戏。React + TypeScript + Vite，所有画面由 CSS、SVG 和 Canvas 绘制；无需账号、后端、付费接口或外部游戏服务。
 
+**在线游玩：** [https://yanlvlab.github.io/jianbing-simulator/](https://yanlvlab.github.io/jianbing-simulator/)
+
 ## 本地运行
 
 需要 Node.js 20 或更高版本。进入本目录后运行：
@@ -76,5 +78,7 @@ node tests/playthrough.mjs
 node tests/level-and-mobile.mjs
 node tests/save-and-endless.mjs
 ```
+
+`playthrough.mjs` 可通过 `TEST_BASE_URL` 指向已部署网址；已对 GitHub Pages 版本执行完整出餐测试。
 
 脚本里的 Chrome 路径目前为 Windows 默认安装路径；其他系统可修改 `executablePath`。截图输出会保存到 `tests/` 且被 Git 忽略。
