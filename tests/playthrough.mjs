@@ -56,6 +56,7 @@ try {
       );
     }
   await page.mouse.up();
+  await page.screenshot({ path: "tests/v2-egg-spread.png" });
   await page.getByRole("button", { name: /下一步：翻面/ }).click();
   await page.waitForTimeout(8500);
   await page.getByRole("button", { name: /现在翻面/ }).click();

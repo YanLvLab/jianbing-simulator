@@ -8,6 +8,8 @@
 
 美术规范与组件映射见 [V2 美术规范](docs/V2_ART_DIRECTION.md)，动画逐项测试与画面记录见 [V2 验收记录](docs/V2_ANIMATION_TEST.md)。
 
+虚拟玩家完整试玩、真实摊制视频与同类游戏的对照及后续缺口见 [试玩对照记录](docs/BOT_PLAYTEST_AND_REFERENCES.md)。
+
 ## 本地运行
 
 需要 Node.js 20 或更高版本。进入本目录后运行：

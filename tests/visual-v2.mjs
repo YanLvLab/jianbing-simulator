@@ -51,6 +51,13 @@ try {
       path: `tests/v2-customer-${name}.png`,
       fullPage: true,
     });
+    if (name === "mobile") {
+      await page.locator(".tools-panel").scrollIntoViewIfNeeded();
+      const ribbon = await page.locator(".mobile-order-ribbon").boundingBox();
+      if (!ribbon || ribbon.y > 50 || ribbon.y + ribbon.height < 0)
+        throw Error("Mobile order is not visible while using tools");
+      await page.screenshot({ path: "tests/v2-mobile-order-in-use.png" });
+    }
     console.log(`PASS: ${name} scene, griddle and spread rendered`);
     await page.close();
   }

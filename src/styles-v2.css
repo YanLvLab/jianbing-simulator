@@ -151,6 +151,9 @@
 .app-shell:has(.game-page) > .topbar {
   display: none;
 }
+.app-shell:has(.game-page) {
+  overflow: visible;
+}
 .game-hud > div:nth-child(4) {
   display: none;
 }
@@ -1120,4 +1123,58 @@
 .reduce-motion .tool-grid button,
 .reduce-motion .primary-button {
   transition: none !important;
+}
+
+.mobile-order-ribbon {
+  display: none;
+}
+.game-page .tool-grid button.tool-needed {
+  outline: 2px solid #f0c36b;
+  outline-offset: -3px;
+}
+.game-page .tool-grid button.tool-complete {
+  background: #dce9cf;
+}
+.game-page .tool-grid button.tool-complete b {
+  color: #246342;
+}
+.game-page .tool-grid button.tool-avoid {
+  opacity: 0.65;
+}
+.game-page .tool-grid button.tool-error {
+  outline: 2px solid #c84636;
+  outline-offset: -3px;
+}
+.game-page .tool-grid button.tool-active {
+  box-shadow: inset 0 -5px 0 #d5853d;
+}
+@media (max-width: 740px) {
+  .mobile-order-ribbon {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 22;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 7px 12px;
+    color: #fff8e7;
+    background: #18382cef;
+    font-size: 12px;
+    box-shadow: 0 5px 15px #11261c44;
+  }
+  .mobile-order-ribbon b {
+    white-space: nowrap;
+    color: #f3cb85;
+  }
+  .mobile-order-ribbon span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobile-order-ribbon em {
+    white-space: nowrap;
+    font-style: normal;
+    color: #ffbd9b;
+  }
 }

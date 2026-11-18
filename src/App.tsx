@@ -91,6 +91,13 @@ function ticketText(wants: Partial<Record<Ingredient, number>>) {
     .join(" · ");
 }
 
+function pancakeOrderClass(expected?: number, actual?: number) {
+  if (expected === undefined) return "";
+  if (expected === 0) return actual ? "tool-error" : "tool-avoid";
+  if ((actual ?? 0) >= expected) return "tool-complete";
+  return "tool-needed";
+}
+
 function startRun(mode: Mode, level: number, save: Save): Run {
   const config = LEVELS[level - 1];
   const first = mode === "free" ? null : makeOrder(level, 1, mode);
@@ -963,6 +970,15 @@ export default function App() {
               {run.paused ? "继续" : "暂停"} Ⅱ
             </button>
           </div>
+          {run.order && !serving && (
+            <div className="mobile-order-ribbon" aria-label="当前订单速览">
+              <b>{run.order.customer.name}</b>
+              <span>{ticketText(run.order.wants)}</span>
+              {run.order.notes.length > 0 && (
+                <em>{run.order.notes.join(" · ")}</em>
+              )}
+            </div>
+          )}
           <div className="game-layout">
             <CounterProps side="left" />
             <CounterProps side="right" />
@@ -1169,12 +1185,19 @@ export default function App() {
                     ).map((id) => {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
                       return (
-                        <button key={id} onClick={() => addIngredient(id)}>
+                        <button
+                          key={id}
+                          className={`${pancakeOrderClass(run.order?.wants[id], run.pancake.sauces[id])} ${run.pancake.activeSauce === id ? "tool-active" : ""}`}
+                          onClick={() => addIngredient(id)}
+                        >
                           <i>
                             <IngredientArt id={id} />
                           </i>
                           <span>{item.name}</span>
-                          <b>×{run.pancake.sauces[id] ?? 0}</b>
+                          <b>
+                            {run.pancake.sauces[id] ?? 0}
+                            {run.order && `/${run.order.wants[id] ?? 0}`}
+                          </b>
                         </button>
                       );
                     })}
@@ -1191,12 +1214,22 @@ export default function App() {
                     ).map((id) => {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
                       return (
-                        <button key={id} onClick={() => addIngredient(id)}>
+                        <button
+                          key={id}
+                          className={pancakeOrderClass(
+                            run.order?.wants[id],
+                            run.pancake.fillings[id],
+                          )}
+                          onClick={() => addIngredient(id)}
+                        >
                           <i>
                             <IngredientArt id={id} />
                           </i>
                           <span>{item.name}</span>
-                          <b>×{run.pancake.fillings[id] ?? 0}</b>
+                          <b>
+                            {run.pancake.fillings[id] ?? 0}
+                            {run.order && `/${run.order.wants[id] ?? 0}`}
+                          </b>
                         </button>
                       );
                     })}

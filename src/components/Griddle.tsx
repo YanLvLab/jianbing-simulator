@@ -48,7 +48,8 @@ function drawTrace(
     else ctx.lineTo(x, y);
   });
   ctx.stroke();
-  for (const p of points) {
+  if (points.length === 1) {
+    const p = points[0];
     ctx.beginPath();
     ctx.arc(p.x * size, p.y * size, width * 0.5, 0, Math.PI * 2);
     ctx.fill();
@@ -324,6 +325,9 @@ function drawFood(
       e.arc(center, center, radius - 4, 0, 7);
       e.clip();
       drawTrace(e, pancake.eggPaint, 90, cookedEgg ? "#dfbb79" : "#fff0bb");
+      e.globalAlpha = cookedEgg ? 0.22 : 0.3;
+      drawTrace(e, pancake.eggPaint, 33, "#eebc46");
+      e.globalAlpha = 1;
       e.restore();
       if (cookedEgg) {
         e.globalCompositeOperation = "source-atop";
@@ -348,6 +352,8 @@ function drawFood(
     ctx.globalAlpha = cookedEgg ? 0.7 : 0.83;
     ctx.drawImage(eggMask, 0, 0);
     ctx.globalAlpha = 1;
+    const yolkVisibility = Math.max(0, 1 - pancake.eggPaint.length / 24);
+    ctx.globalAlpha = yolkVisibility;
     for (let i = 0; i < pancake.eggs; i++) {
       const x = center + (i - (pancake.eggs - 1) / 2) * 39,
         y = center - 20;
@@ -365,6 +371,7 @@ function drawFood(
       ctx.arc(x - 3, y - 2, 10, 3.5, 5.5);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
   }
   for (const [id, count] of Object.entries(pancake.sauces)) {
     const color =
