@@ -11,6 +11,7 @@ export type Save = {
   decoration: boolean;
   endless: { revenue: number; served: number; perfectStreak: number };
   sound: boolean;
+  reducedMotion: boolean;
   achievements: string[];
   cilantroMistakeStreak: number;
   perfectStreak: number;
@@ -28,6 +29,7 @@ export const defaultSave = (): Save => ({
   decoration: false,
   endless: { revenue: 0, served: 0, perfectStreak: 0 },
   sound: true,
+  reducedMotion: false,
   achievements: [],
   cilantroMistakeStreak: 0,
   perfectStreak: 0,
@@ -54,6 +56,8 @@ function normalizeRun(value: unknown): Run | null {
     pancake: {
       ...run.pancake,
       batterType: run.pancake.batterType ?? "classic",
+      saucePaint: run.pancake.saucePaint ?? {},
+      activeSauce: run.pancake.activeSauce ?? null,
     },
     secondsLeft:
       run.mode === "level" && Number.isFinite(run.secondsLeft)

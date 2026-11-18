@@ -10,6 +10,8 @@ export type Pancake = {
   flipHeat: number;
   heat: number;
   sauces: Partial<Record<Ingredient, number>>;
+  saucePaint: Partial<Record<Ingredient, Point[]>>;
+  activeSauce: Ingredient | null;
   fillings: Partial<Record<Ingredient, number>>;
   folds: ("left" | "right")[];
   elapsed: number;
@@ -57,6 +59,8 @@ export const newPancake = (): Pancake => ({
   flipHeat: 0,
   heat: 0,
   sauces: {},
+  saucePaint: {},
+  activeSauce: null,
   fillings: {},
   folds: [],
   elapsed: 0,

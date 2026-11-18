@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  Customer,
   INGREDIENTS,
   Ingredient,
   LEVELS,
@@ -11,6 +12,8 @@ import {
 } from "./data/config";
 import Griddle from "./components/Griddle";
 import CustomerPortrait from "./components/CustomerPortrait";
+import IngredientArt from "./components/IngredientArt";
+import CounterProps from "./components/CounterProps";
 import {
   batterCoverage,
   eggCoverage,
@@ -127,6 +130,11 @@ export default function App() {
   const [run, setRun] = useState<Run | null>(save.activeRun);
   const [toast, setToast] = useState<Result | null>(null);
   const [notice, setNotice] = useState("");
+  const [serving, setServing] = useState(false);
+  const [leavingCustomer, setLeavingCustomer] = useState<Customer | null>(null);
+  const [lastServedCustomer, setLastServedCustomer] = useState<Customer | null>(
+    null,
+  );
   const [batterPoured, setBatterPoured] = useState(
     !!save.activeRun?.pancake.batter.length,
   );
@@ -136,9 +144,25 @@ export default function App() {
   const completed = useRef(false);
   const lastTick = useRef(performance.now());
   const runRef = useRef(run);
+  const previousOrder = useRef(run?.order ?? null);
+  const previousMissed = useRef(run?.missed ?? 0);
   runRef.current = run;
   const sound = (kind: Sound) => playSound(kind, save.sound);
   useEffect(() => persistSave(save), [save]);
+  useEffect(() => {
+    if (run && run.missed > previousMissed.current && previousOrder.current) {
+      setLeavingCustomer(previousOrder.current.customer);
+      const timer = window.setTimeout(
+        () => setLeavingCustomer(null),
+        save.reducedMotion ? 150 : 750,
+      );
+      previousOrder.current = run.order;
+      previousMissed.current = run.missed;
+      return () => window.clearTimeout(timer);
+    }
+    previousOrder.current = run?.order ?? null;
+    previousMissed.current = run?.missed ?? 0;
+  }, [run?.order?.id, run?.missed, save.reducedMotion]);
   useEffect(() => {
     const timer = setInterval(() => {
       const current = runRef.current;
@@ -291,6 +315,17 @@ export default function App() {
         return { ...r, pancake: { ...p, batter: [...p.batter, point] } };
       if (p.stage === "egg" && p.eggs > 0)
         return { ...r, pancake: { ...p, eggPaint: [...p.eggPaint, point] } };
+      if (p.stage === "sauce" && p.activeSauce)
+        return {
+          ...r,
+          pancake: {
+            ...p,
+            saucePaint: {
+              ...p.saucePaint,
+              [p.activeSauce]: [...(p.saucePaint[p.activeSauce] ?? []), point],
+            },
+          },
+        };
       return r;
     });
   const fold = (side: "left" | "right") =>
@@ -373,8 +408,11 @@ export default function App() {
     }
     if (p.stage === "sauce" && SAUCES.includes(id)) {
       updatePancake(
-        { sauces: { ...p.sauces, [id]: Math.min(3, (p.sauces[id] ?? 0) + 1) } },
-        "酱料已经刷上，检查订单用量。",
+        {
+          sauces: { ...p.sauces, [id]: Math.min(3, (p.sauces[id] ?? 0) + 1) },
+          activeSauce: id,
+        },
+        "酱料已选中，在饼面拖动刷子控制覆盖。",
         "sauce",
       );
       return;
@@ -393,7 +431,9 @@ export default function App() {
     }
   };
   const serve = () => {
-    if (!run || run.pancake.stage !== "bag") return;
+    if (!run || run.pancake.stage !== "bag" || serving) return;
+    setLastServedCustomer(run.order?.customer ?? null);
+    setServing(true);
     const result = evaluate(
       run.pancake,
       run.order,
@@ -431,7 +471,13 @@ export default function App() {
       cilantroMistakeStreak: cilantroStreak,
       perfectStreak,
     }));
-    setToast(result);
+    window.setTimeout(
+      () => {
+        setServing(false);
+        setToast(result);
+      },
+      save.reducedMotion ? 220 : 1050,
+    );
     const served = run.served + 1,
       sequence = run.sequence + 1;
     const finished =
@@ -536,7 +582,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${save.reducedMotion ? "reduce-motion" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={backToMenu}>
           <span className="brand-stamp">饼</span>
@@ -796,6 +842,18 @@ export default function App() {
             </button>
           </section>
           <section className="settings-panel">
+            <h2>动态效果</h2>
+            <p>减少角色待机、热气和镜头过渡。拖动与出餐反馈仍然保留。</p>
+            <button
+              className="outline-button"
+              onClick={() =>
+                setSave((s) => ({ ...s, reducedMotion: !s.reducedMotion }))
+              }
+            >
+              减少动态效果：{save.reducedMotion ? "开启" : "关闭"}
+            </button>
+          </section>
+          <section className="settings-panel">
             <h2>本地存档</h2>
             <p>
               进度自动保存在当前浏览器。可导出 JSON 备份，并在其他浏览器导入。
@@ -892,6 +950,10 @@ export default function App() {
                 {run.served} / {run.missed}
               </strong>
             </div>
+            <div className="game-coins">
+              <small>金币</small>
+              <strong>¥{save.coins}</strong>
+            </div>
             <button
               className="pause-button"
               onClick={() =>
@@ -902,8 +964,24 @@ export default function App() {
             </button>
           </div>
           <div className="game-layout">
+            <CounterProps side="left" />
+            <CounterProps side="right" />
+            {leavingCustomer && (
+              <div className="leaving-customer">
+                <CustomerPortrait customer={leavingCustomer} angry />
+              </div>
+            )}
             <aside className="customer-panel">
-              {run.order ? (
+              {serving && lastServedCustomer ? (
+                <div className="customer-stage serving-customer">
+                  <CustomerPortrait
+                    customer={lastServedCustomer}
+                    angry={false}
+                    happy
+                  />
+                  <div className="speech">“好香！这份是我的吧？”</div>
+                </div>
+              ) : run.order ? (
                 <>
                   <div className="customer-stage">
                     <CustomerPortrait
@@ -976,6 +1054,8 @@ export default function App() {
                   onPaint={paint}
                   onFold={fold}
                   scraper={save.upgrades.scraper}
+                  poured={batterPoured}
+                  reducedMotion={save.reducedMotion}
                 />
               </div>
               <div className="work-instruction">
@@ -1059,7 +1139,8 @@ export default function App() {
                       sound("pour");
                     }}
                   >
-                    ◉ {batterPoured ? "面糊已倒入" : "倒入面糊"}
+                    <IngredientArt id="batter" />{" "}
+                    {batterPoured ? "面糊已倒入" : "倒入面糊"}
                   </button>
                 </>
               )}
@@ -1070,7 +1151,8 @@ export default function App() {
                     className="tool-main"
                     onClick={() => addIngredient("egg")}
                   >
-                    ◉ 打一个鸡蛋 <small>已打 {run.pancake.eggs}/5</small>
+                    <IngredientArt id="egg" /> 打一个鸡蛋{" "}
+                    <small>已打 {run.pancake.eggs}/5</small>
                   </button>
                 </>
               )}
@@ -1088,7 +1170,9 @@ export default function App() {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
                       return (
                         <button key={id} onClick={() => addIngredient(id)}>
-                          <i style={{ background: item.color }}>{item.icon}</i>
+                          <i>
+                            <IngredientArt id={id} />
+                          </i>
                           <span>{item.name}</span>
                           <b>×{run.pancake.sauces[id] ?? 0}</b>
                         </button>
@@ -1108,7 +1192,9 @@ export default function App() {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
                       return (
                         <button key={id} onClick={() => addIngredient(id)}>
-                          <i style={{ background: item.color }}>{item.icon}</i>
+                          <i>
+                            <IngredientArt id={id} />
+                          </i>
                           <span>{item.name}</span>
                           <b>×{run.pancake.fillings[id] ?? 0}</b>
                         </button>
@@ -1149,7 +1235,18 @@ export default function App() {
               </div>
             </aside>
           </div>
-          {run.paused && !toast && !run.finished && (
+          {serving && (
+            <div className="serve-animation" aria-label="正在装袋出餐">
+              <div className="serve-handoff">
+                <div className="serve-roll" />
+                <div className="serve-paper">
+                  <IngredientArt id="bag" />
+                </div>
+              </div>
+              <span>新鲜出炉 · 递给顾客</span>
+            </div>
+          )}
+          {run.paused && !toast && !run.finished && !serving && (
             <div className="modal-backdrop">
               <div className="modal-card">
                 <p className="eyebrow">暂时歇口气</p>
@@ -1175,6 +1272,16 @@ export default function App() {
             <div className="modal-backdrop">
               <div className="modal-card result-card">
                 <p className="eyebrow">出餐评价 / ORDER COMPLETE</p>
+                {lastServedCustomer && (
+                  <div
+                    className={`result-customer ${toast.wrong ? "disappointed" : "delighted"}`}
+                  >
+                    <CustomerPortrait
+                      customer={lastServedCustomer}
+                      angry={toast.wrong}
+                    />
+                  </div>
+                )}
                 <div className="result-score">
                   {toast.score}
                   <small>分</small>
@@ -1204,7 +1311,7 @@ export default function App() {
               </div>
             </div>
           )}
-          {run.finished && !toast && (
+          {run.finished && !toast && !serving && (
             <div className="modal-backdrop">
               <div className="modal-card summary-card">
                 <p className="eyebrow">

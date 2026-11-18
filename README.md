@@ -1,8 +1,12 @@
 # 煎饼果子模拟器 · Jianbing Simulator
 
-一款可以直接在浏览器里玩的中文街头早餐摊游戏。React + TypeScript + Vite，所有画面由 CSS、SVG 和 Canvas 绘制；无需账号、后端、付费接口或外部游戏服务。
+一款可以直接在浏览器里玩的中文街头早餐摊游戏。React + TypeScript + Vite；V2 使用手绘场景与人物素材、SVG 工具和随操作轨迹绘制的 Canvas 食物。无需账号、后端、付费接口或外部游戏服务。
 
 **在线游玩：** [https://yanlvlab.github.io/jianbing-simulator/](https://yanlvlab.github.io/jianbing-simulator/)
+
+![V2 摊位场景](docs/screenshots/stall-desktop.png)
+
+美术规范与组件映射见 [V2 美术规范](docs/V2_ART_DIRECTION.md)，动画逐项测试与画面记录见 [V2 验收记录](docs/V2_ANIMATION_TEST.md)。
 
 ## 本地运行
 
@@ -27,7 +31,7 @@ npm run preview
 1. **摊面**：自由模式可先选原味、杂粮或紫米面糊。点「倒入面糊」，按住铁板用鼠标或手指画圈。覆盖越完整、形状越圆，评分越高。
 2. **打蛋**：点鸡蛋，再在饼面按住拖动涂匀。双蛋订单需要点两次。
 3. **翻面**：观察火候进度条，在绿色区间点「现在翻面」。太早夹生，太晚烧焦。
-4. **刷酱、加料**：按顾客小票点食材。一次点击是一份；「加倍」点两次，「不要」则不要点。
+4. **刷酱、加料**：按顾客小票点食材。选酱后可以在饼面拖动刷子；一次点击是一份，「加倍」点两次，「不要」则不要点。
 5. **折叠**：从左边和右边的饼边分别向铁板中心拖动。
 6. **装袋**：点「装袋出餐」结算。评分综合面饼、蛋液、火候、订单准确度、折叠和速度。
 
@@ -41,19 +45,22 @@ npm run preview
 
 ```text
 src/
-  components/    铁板 Canvas、顾客 SVG
+  assets/        手绘街景和五位顾客画页
+  components/    铁板 Canvas、食材与工具 SVG、场景道具
   data/          关卡、顾客、食材和订单配置
   game/          制作状态、覆盖度、评分和星级
   systems/       版本化存档、Web Audio 音效
   App.tsx        游戏流程与界面
-  styles.css     响应式街头摊位视觉
+  styles.css     基础样式
+  styles-v2.css  V2 场景、HUD、手机布局与动画
 tests/           浏览器实际操作脚本
+docs/            V2 美术规范、动画测试记录和截图
 .github/workflows/deploy.yml
 ```
 
 ## GitHub Pages 发布
 
-本目录设计为一个**独立仓库**。将本目录内容放到新 GitHub 仓库根目录，推送至 `main` 或 `master`；在仓库 **Settings → Pages → Build and deployment** 中选择 **GitHub Actions**。`deploy.yml` 会执行 `npm ci`、`npm run build`，并发布 `dist/`。如需在现有多项目仓库中发布，请把工作流移动到仓库根目录的 `.github/workflows/`，并给 `npm ci`、构建和上传路径加上 `jianbing-simulator/` 前缀。
+当前独立仓库已启用 GitHub Pages。推送至 `main` 后，`deploy.yml` 会执行 `npm ci`、`npm run build`，并发布 `dist/`。复制到其他独立仓库时，在 **Settings → Pages → Build and deployment** 中选择 **GitHub Actions**。如需在多项目仓库中发布，请把工作流移到仓库根目录的 `.github/workflows/`，并给构建和上传路径加上项目目录前缀。
 
 ## 验收
 
@@ -79,6 +86,7 @@ node tests/playthrough.mjs
 node tests/level-and-mobile.mjs
 node tests/save-and-endless.mjs
 node tests/levels-smoke.mjs
+node tests/visual-v2.mjs
 ```
 
 `playthrough.mjs` 可通过 `TEST_BASE_URL` 指向已部署网址；已对 GitHub Pages 版本执行完整出餐测试。

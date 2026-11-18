@@ -34,10 +34,8 @@ try {
     const text = await page.locator(".game-hud").innerText();
     if (!text.includes(String(level).padStart(2, "0")))
       throw new Error(`Level ${level} did not start`);
-    await page
-      .locator(".topbar")
-      .getByRole("button", { name: "返回摊位" })
-      .click();
+    await page.getByRole("button", { name: /暂停/ }).click();
+    await page.getByRole("button", { name: "返回主菜单" }).click();
   }
   console.log("PASS: all 10 level configurations open with a customer order");
 } finally {

@@ -12,23 +12,26 @@ try {
   await page.goto(base);
   await page.getByRole("button", { name: /游戏设置/ }).click();
   await page.getByRole("button", { name: /音效：开启/ }).click();
+  await page.getByRole("button", { name: /减少动态效果：关闭/ }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出存档" }).click();
   const download = await downloadPromise;
   const path = await download.path();
   const fs = await import("node:fs/promises");
   const exported = JSON.parse(await fs.readFile(path, "utf8"));
-  if (exported.sound !== false || exported.version !== 1)
+  if (
+    exported.sound !== false ||
+    exported.reducedMotion !== true ||
+    exported.version !== 1
+  )
     throw new Error("Export mismatch");
   exported.coins = 300;
   exported.unlockedLevel = 10;
-  await page
-    .locator("input[type=file]")
-    .setInputFiles({
-      name: "backup.json",
-      mimeType: "application/json",
-      buffer: Buffer.from(JSON.stringify(exported)),
-    });
+  await page.locator("input[type=file]").setInputFiles({
+    name: "backup.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(exported)),
+  });
   await page.getByText("存档导入成功。").waitFor();
   await page.getByRole("button", { name: "返回摊位" }).click();
   await page.getByRole("button", { name: /摊位商店/ }).click();
@@ -78,10 +81,8 @@ try {
   if ((await page.locator(".work-instruction").innerText()).includes("覆盖 0%"))
     throw new Error("Active run did not restore");
   console.log("PASS: active run restored after refresh");
-  await page
-    .locator(".topbar")
-    .getByRole("button", { name: "返回摊位" })
-    .click();
+  await page.getByRole("button", { name: /暂停/ }).click();
+  await page.getByRole("button", { name: "返回主菜单" }).click();
   await page
     .getByRole("button", { name: /无尽经营/ })
     .first()

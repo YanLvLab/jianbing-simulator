@@ -56,6 +56,8 @@ try {
   await click(/开始营业/);
   await click(/第一炉烟火/);
   await make();
+  await page.waitForTimeout(930);
+  await page.screenshot({ path: "tests/v2-level-handoff.png" });
   await click(/接待下一位/);
   await make();
   await click(/查看今日结算/);
