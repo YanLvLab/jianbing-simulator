@@ -32,10 +32,41 @@ const make = async () => {
   await click(/下一步：翻面/);
   await page.waitForTimeout(8200);
   await click(/现在翻面/);
-  await click(/甜面酱/);
+  await page
+    .locator(".counter-station.sauce")
+    .getByRole("button", { name: "甜面酱" })
+    .click();
+  const sauceBox = await page.locator("canvas").boundingBox();
+  if (!sauceBox) throw new Error("No griddle for sauce");
+  await page.mouse.move(
+    sauceBox.x + sauceBox.width * 0.34,
+    sauceBox.y + sauceBox.height * 0.48,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    sauceBox.x + sauceBox.width * 0.66,
+    sauceBox.y + sauceBox.height * 0.53,
+    { steps: 16 },
+  );
+  await page.mouse.up();
   await click(/下一步：加料/);
-  await click(/葱花/);
-  await click(/薄脆/);
+  for (const name of ["葱花", "薄脆"]) {
+    await page
+      .locator(".counter-station.fill")
+      .getByRole("button", { name })
+      .click();
+    await page.mouse.move(
+      sauceBox.x + sauceBox.width * 0.35,
+      sauceBox.y + sauceBox.height * 0.4,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      sauceBox.x + sauceBox.width * 0.65,
+      sauceBox.y + sauceBox.height * 0.6,
+      { steps: 14 },
+    );
+    await page.mouse.up();
+  }
   await click(/下一步：折叠/);
   const b = await page.locator("canvas").boundingBox();
   const pos = (x, y) => [b.x + b.width * x, b.y + b.height * y];
@@ -48,7 +79,15 @@ const make = async () => {
   await page.mouse.move(...pos(0.52, 0.5), { steps: 5 });
   await page.mouse.up();
   await click(/折好了，装袋/);
-  await click(/装袋出餐/);
+  await page.mouse.move(...pos(0.31, 0.5));
+  await page.mouse.down();
+  await page.mouse.move(...pos(0.69, 0.5), { steps: 10 });
+  await page.mouse.up();
+  await page.mouse.move(...pos(0.5, 0.5));
+  await page.mouse.down();
+  await page.mouse.move(...pos(0.84, 0.5), { steps: 10 });
+  await page.mouse.up();
+  await click(/递给顾客/);
 };
 try {
   await page.goto(base);

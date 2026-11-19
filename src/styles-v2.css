@@ -1053,6 +1053,218 @@
     font-size: 58px;
   }
 }
+
+@media (min-width: 741px) {
+  .app-shell:has(.game-page) .site-footer {
+    display: none;
+  }
+  .game-page {
+    height: 100dvh;
+    min-height: 650px;
+    overflow: hidden;
+    padding: 0;
+  }
+  .game-layout {
+    height: calc(100dvh - 62px);
+    min-height: 588px;
+  }
+  .workstation {
+    top: 0;
+    height: calc(100% - 152px);
+  }
+  .griddle-zone {
+    top: 76px;
+    width: min(50vh, 480px);
+  }
+  .work-instruction {
+    top: calc(76px + min(50vh, 480px) + 6px);
+    bottom: auto;
+    width: min(50vh, 480px);
+  }
+  .tools-panel {
+    height: 116px;
+    bottom: 8px;
+  }
+  .counter-props {
+    bottom: 119px;
+  }
+}
+.heat-meter {
+  max-width: none;
+  width: 100%;
+  margin: 9px auto 2px;
+}
+.heat-meter > div:first-child {
+  font-size: 12px;
+  font-weight: 700;
+}
+.heat-track {
+  height: 20px;
+  border: 2px solid #e4d5a3;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.heat-track i {
+  top: 0;
+  height: 20px;
+  border-right: 5px solid #fff8df;
+  filter: drop-shadow(0 0 3px #14231b);
+}
+.work-instruction:has(.heat-meter) {
+  outline: 2px solid #ecbd63;
+  box-shadow: 0 0 25px #eda64277;
+}
+.counter-station {
+  position: absolute;
+  z-index: 5;
+  right: 2%;
+  top: 29%;
+  width: 250px;
+  padding: 12px;
+  color: #fff6df;
+  background: #17392ddf;
+  border: 2px solid #ad8258;
+  border-radius: 17px;
+  box-shadow: 0 13px 25px #10201988;
+}
+.station-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 9px;
+}
+.station-title strong {
+  font-size: 17px;
+}
+.station-title span {
+  font-size: 11px;
+  color: #e8cb8e;
+}
+.station-vessels {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+.station-vessel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 99px;
+  padding: 0 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: #f2e9d7;
+  color: #1c352b;
+  cursor: pointer;
+  transition:
+    transform 0.16s,
+    background 0.16s;
+}
+.station-vessel:hover,
+.station-vessel.active {
+  transform: translateY(-4px);
+  background: #ffdfa4;
+  border-color: #b46d3d;
+}
+.station-vessel:active {
+  transform: translateY(1px) scale(0.96);
+}
+.vessel-art {
+  width: 65px;
+  height: 61px;
+}
+.vessel-food {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+}
+.vessel-food .ingredient-art {
+  width: 100%;
+  height: 100%;
+}
+.vessel-brush {
+  position: absolute;
+  left: 43px;
+  top: 0;
+  width: 5px;
+  height: 49px;
+  background: #a66b3b;
+  border: 1px solid #5d3d2b;
+  transform: rotate(25deg);
+  transform-origin: bottom;
+}
+.vessel-brush:after {
+  content: "";
+  position: absolute;
+  left: -4px;
+  bottom: -6px;
+  width: 13px;
+  height: 12px;
+  border-radius: 2px 2px 7px 7px;
+  background: #643d2e;
+}
+.vessel-name {
+  font-size: 11px;
+  font-weight: 700;
+}
+.vessel-count {
+  font-size: 10px;
+  color: #a14c35;
+}
+.station-load {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 10px;
+}
+.station-load i {
+  flex: 1;
+  height: 7px;
+  border-radius: 8px;
+  background: #705549;
+  overflow: hidden;
+}
+.station-load em {
+  display: block;
+  height: 100%;
+  background: #edb35d;
+}
+.game-page .station-fallback {
+  display: none;
+}
+@media (max-width: 1050px) and (min-width: 741px) {
+  .counter-station {
+    right: 1%;
+    width: 210px;
+  }
+}
+@media (max-width: 740px) {
+  .counter-station {
+    position: relative;
+    right: auto;
+    top: auto;
+    width: 100%;
+    margin: 0 0 10px;
+    flex: none;
+  }
+  .station-vessels {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  .counter-station.sauce .station-vessels {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .station-vessel {
+    min-height: 90px;
+  }
+  .vessel-art {
+    width: 56px;
+  }
+}
 @media (max-width: 740px) {
   .mode-grid {
     background: none;

@@ -43,7 +43,7 @@ try {
   await page.mouse.up();
   await page.getByRole("button", { name: /下一步：打蛋/ }).click();
   await page.getByRole("button", { name: /打一个鸡蛋/ }).click();
-  await page.waitForTimeout(160);
+  await page.waitForTimeout(450);
   await page.screenshot({ path: "tests/v2-anim-egg.png" });
   await page.mouse.move(pt(0.5, 0.5).x, pt(0.5, 0.5).y);
   await page.mouse.down();
@@ -59,6 +59,11 @@ try {
   await page.screenshot({ path: "tests/v2-egg-spread.png" });
   await page.getByRole("button", { name: /下一步：翻面/ }).click();
   await page.waitForTimeout(8500);
+  const heat = await page.locator(".heat-meter").boundingBox();
+  const toolBar = await page.locator(".tools-panel").boundingBox();
+  if (!heat || !toolBar || heat.y + heat.height >= toolBar.y)
+    throw Error("Heat meter hidden by toolbar");
+  await page.screenshot({ path: "tests/v3-heat-visible.png" });
   await page.getByRole("button", { name: /现在翻面/ }).click();
   await page.waitForTimeout(220);
   await page.screenshot({ path: "tests/v2-anim-flip.png" });
@@ -83,18 +88,36 @@ try {
   console.log(
     `Flip animation frames: ${frameTimes.length}, median gap ${gaps[Math.floor(gaps.length / 2)].toFixed(1)}ms`,
   );
-  await page.getByRole("button", { name: /甜面酱/ }).click();
+  await page
+    .locator(".counter-station.sauce")
+    .getByRole("button", { name: "甜面酱" })
+    .click();
   await page.mouse.move(pt(0.35, 0.48).x, pt(0.35, 0.48).y);
   await page.mouse.down();
   await page.mouse.move(pt(0.65, 0.52).x, pt(0.65, 0.52).y, { steps: 15 });
   await page.mouse.up();
   await page.screenshot({ path: "tests/v2-anim-sauce.png" });
   await page.getByRole("button", { name: /下一步：加料/ }).click();
-  await page.getByRole("button", { name: /葱花/ }).click();
+  await page
+    .locator(".counter-station.fill")
+    .getByRole("button", { name: "葱花" })
+    .click();
+  await page.mouse.move(pt(0.33, 0.38).x, pt(0.33, 0.38).y);
+  await page.mouse.down();
+  await page.mouse.move(pt(0.66, 0.62).x, pt(0.66, 0.62).y, { steps: 18 });
+  await page.mouse.up();
   await page.waitForTimeout(150);
   await page.screenshot({ path: "tests/v2-anim-fill.png" });
-  for (const name of ["香菜", "薄脆", "火腿肠"])
-    await page.getByRole("button", { name: new RegExp(name) }).click();
+  for (const name of ["香菜", "薄脆", "火腿肠"]) {
+    await page
+      .locator(".counter-station.fill")
+      .getByRole("button", { name })
+      .click();
+    await page.mouse.move(pt(0.35, 0.58).x, pt(0.35, 0.58).y);
+    await page.mouse.down();
+    await page.mouse.move(pt(0.65, 0.38).x, pt(0.65, 0.38).y, { steps: 18 });
+    await page.mouse.up();
+  }
   await page.getByRole("button", { name: /下一步：折叠/ }).click();
   await page.mouse.move(pt(0.22, 0.5).x, pt(0.22, 0.5).y);
   await page.mouse.down();
@@ -106,8 +129,21 @@ try {
   await page.mouse.down();
   await page.mouse.move(pt(0.52, 0.5).x, pt(0.52, 0.5).y, { steps: 8 });
   await page.mouse.up();
+  await page.waitForTimeout(750);
+  await page.screenshot({ path: "tests/v3-folded-final.png" });
   await page.getByRole("button", { name: /折好了，装袋/ }).click();
-  await page.getByRole("button", { name: /装袋出餐/ }).click();
+  await page.screenshot({ path: "tests/v3-before-cut.png" });
+  await page.mouse.move(pt(0.31, 0.5).x, pt(0.31, 0.5).y);
+  await page.mouse.down();
+  await page.mouse.move(pt(0.69, 0.5).x, pt(0.69, 0.5).y, { steps: 12 });
+  await page.mouse.up();
+  await page.screenshot({ path: "tests/v3-after-cut.png" });
+  await page.mouse.move(pt(0.5, 0.5).x, pt(0.5, 0.5).y);
+  await page.mouse.down();
+  await page.mouse.move(pt(0.84, 0.5).x, pt(0.84, 0.5).y, { steps: 12 });
+  await page.mouse.up();
+  await page.screenshot({ path: "tests/v3-bagged.png" });
+  await page.getByRole("button", { name: /递给顾客/ }).click();
   await page.waitForTimeout(180);
   await page.screenshot({ path: "tests/v2-anim-bag.png" });
   await page.waitForTimeout(170);

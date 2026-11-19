@@ -1,6 +1,6 @@
 import { Ingredient, LEVELS, Mode, Order, Stage } from "../data/config";
 
-export type Point = { x: number; y: number };
+export type Point = { x: number; y: number; strength?: number };
 export type Pancake = {
   stage: Stage;
   batterType: "classic" | "grain" | "purple";
@@ -12,8 +12,16 @@ export type Pancake = {
   sauces: Partial<Record<Ingredient, number>>;
   saucePaint: Partial<Record<Ingredient, Point[]>>;
   activeSauce: Ingredient | null;
+  brushLoad: number;
+  brushFresh: boolean;
   fillings: Partial<Record<Ingredient, number>>;
+  fillingDrops: Partial<Record<Ingredient, Point[]>>;
+  activeFilling: Ingredient | null;
+  fillLoad: number;
+  fillFresh: boolean;
   folds: ("left" | "right")[];
+  cut: boolean;
+  bagged: boolean;
   elapsed: number;
 };
 export type Result = {
@@ -61,8 +69,16 @@ export const newPancake = (): Pancake => ({
   sauces: {},
   saucePaint: {},
   activeSauce: null,
+  brushLoad: 0,
+  brushFresh: false,
   fillings: {},
+  fillingDrops: {},
+  activeFilling: null,
+  fillLoad: 0,
+  fillFresh: false,
   folds: [],
+  cut: false,
+  bagged: false,
   elapsed: 0,
 });
 

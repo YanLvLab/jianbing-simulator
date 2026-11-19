@@ -14,6 +14,7 @@ import Griddle from "./components/Griddle";
 import CustomerPortrait from "./components/CustomerPortrait";
 import IngredientArt from "./components/IngredientArt";
 import CounterProps from "./components/CounterProps";
+import CounterStation from "./components/CounterStation";
 import {
   batterCoverage,
   eggCoverage,
@@ -33,7 +34,7 @@ import {
   Save,
   SAVE_KEY,
 } from "./systems/save";
-import { playSound, Sound } from "./systems/sound";
+import { playSound, startMusic, Sound } from "./systems/sound";
 
 type Screen = "menu" | "levels" | "shop" | "settings" | "achievements" | "game";
 const ACHIEVEMENTS = [
@@ -155,6 +156,13 @@ export default function App() {
   const previousMissed = useRef(run?.missed ?? 0);
   runRef.current = run;
   const sound = (kind: Sound) => playSound(kind, save.sound);
+  useEffect(
+    () =>
+      screen === "game"
+        ? startMusic(save.music && !run?.paused && !run?.finished)
+        : undefined,
+    [screen, save.music, run?.paused, run?.finished],
+  );
   useEffect(() => persistSave(save), [save]);
   useEffect(() => {
     if (run && run.missed > previousMissed.current && previousOrder.current) {
@@ -322,17 +330,75 @@ export default function App() {
         return { ...r, pancake: { ...p, batter: [...p.batter, point] } };
       if (p.stage === "egg" && p.eggs > 0)
         return { ...r, pancake: { ...p, eggPaint: [...p.eggPaint, point] } };
-      if (p.stage === "sauce" && p.activeSauce)
+      if (p.stage === "sauce" && p.activeSauce && p.brushLoad > 0) {
+        if (Math.hypot(point.x - 0.5, point.y - 0.5) > 0.4) return r;
+        const previous = p.saucePaint[p.activeSauce] ?? [];
+        if (
+          previous.length &&
+          Math.hypot(
+            point.x - previous.at(-1)!.x,
+            point.y - previous.at(-1)!.y,
+          ) < 0.009
+        )
+          return r;
         return {
           ...r,
           pancake: {
             ...p,
+            sauces: p.brushFresh
+              ? {
+                  ...p.sauces,
+                  [p.activeSauce]: Math.min(
+                    3,
+                    (p.sauces[p.activeSauce] ?? 0) + 1,
+                  ),
+                }
+              : p.sauces,
             saucePaint: {
               ...p.saucePaint,
-              [p.activeSauce]: [...(p.saucePaint[p.activeSauce] ?? []), point],
+              [p.activeSauce]: [
+                ...previous,
+                { ...point, strength: p.brushLoad },
+              ],
             },
+            brushLoad: Math.max(0, p.brushLoad - 0.026),
+            brushFresh: false,
           },
         };
+      }
+      if (p.stage === "fill" && p.activeFilling && p.fillLoad > 0) {
+        if (Math.hypot(point.x - 0.5, point.y - 0.5) > 0.39) return r;
+        const previous = p.fillingDrops[p.activeFilling] ?? [];
+        if (
+          previous.length &&
+          Math.hypot(
+            point.x - previous.at(-1)!.x,
+            point.y - previous.at(-1)!.y,
+          ) < 0.026
+        )
+          return r;
+        return {
+          ...r,
+          pancake: {
+            ...p,
+            fillings: p.fillFresh
+              ? {
+                  ...p.fillings,
+                  [p.activeFilling]: Math.min(
+                    3,
+                    (p.fillings[p.activeFilling] ?? 0) + 1,
+                  ),
+                }
+              : p.fillings,
+            fillingDrops: {
+              ...p.fillingDrops,
+              [p.activeFilling]: [...previous, point],
+            },
+            fillLoad: Math.max(0, p.fillLoad - 0.055),
+            fillFresh: false,
+          },
+        };
+      }
       return r;
     });
   const fold = (side: "left" | "right") =>
@@ -348,6 +414,12 @@ export default function App() {
           }
         : r,
     );
+  const cut = () => {
+    updatePancake({ cut: true }, "沿中线切开了。把两半拖到右侧纸袋。", "cut");
+  };
+  const bag = () => {
+    updatePancake({ bagged: true }, "纸袋装好了，递给顾客！", "bag");
+  };
   const updatePancake = (
     patch: Partial<Run["pancake"]>,
     message: string,
@@ -396,7 +468,7 @@ export default function App() {
           sauce: "按订单刷酱。每点一次增加一份。",
           fill: "按订单加入配料。需要加倍就点两次。",
           fold: "从左右饼边分别拖向中心。",
-          bag: "点击装袋，把煎饼交给顾客。",
+          bag: "横划中线切断，再把煎饼拖入右侧纸袋。",
         }[next],
         next === "fold" ? "fold" : undefined,
       );
@@ -414,33 +486,43 @@ export default function App() {
       return;
     }
     if (p.stage === "sauce" && SAUCES.includes(id)) {
+      if ((p.sauces[id] ?? 0) >= 3) {
+        setNotice("这一味已经够多了。");
+        return;
+      }
       updatePancake(
         {
-          sauces: { ...p.sauces, [id]: Math.min(3, (p.sauces[id] ?? 0) + 1) },
           activeSauce: id,
+          brushLoad: 1,
+          brushFresh: true,
         },
-        "酱料已选中，在饼面拖动刷子控制覆盖。",
+        `刷子已蘸${INGREDIENTS.find((i) => i.id === id)?.name}，在饼上拖动；刷淡了再蘸。`,
         "sauce",
       );
       return;
     }
     if (p.stage === "fill" && FILLINGS.includes(id)) {
+      if ((p.fillings[id] ?? 0) >= 3) {
+        setNotice("这一味已经够多了。");
+        return;
+      }
       updatePancake(
         {
-          fillings: {
-            ...p.fillings,
-            [id]: Math.min(3, (p.fillings[id] ?? 0) + 1),
-          },
+          activeFilling: id,
+          fillLoad: 1,
+          fillFresh: true,
         },
-        "配料已入锅，继续加料或折叠。",
+        `抓一把${INGREDIENTS.find((i) => i.id === id)?.name}，在饼上拖动撒开。`,
         "scrape",
       );
     }
   };
   const serve = () => {
-    if (!run || run.pancake.stage !== "bag" || serving) return;
+    if (!run || run.pancake.stage !== "bag" || !run.pancake.bagged || serving)
+      return;
     setLastServedCustomer(run.order?.customer ?? null);
     setServing(true);
+    setRun((current) => (current ? { ...current, paused: true } : current));
     const result = evaluate(
       run.pancake,
       run.order,
@@ -478,13 +560,6 @@ export default function App() {
       cilantroMistakeStreak: cilantroStreak,
       perfectStreak,
     }));
-    window.setTimeout(
-      () => {
-        setServing(false);
-        setToast(result);
-      },
-      save.reducedMotion ? 220 : 1050,
-    );
     const served = run.served + 1,
       sequence = run.sequence + 1;
     const finished =
@@ -499,7 +574,7 @@ export default function App() {
             sequence,
             run.mode,
           );
-    setRun({
+    const nextRun: Run = {
       ...run,
       served,
       sequence,
@@ -521,8 +596,16 @@ export default function App() {
       finished,
       lastResult: result,
       message: "新的一份，从倒面糊开始。",
-    });
-    setBatterPoured(false);
+    };
+    window.setTimeout(
+      () => {
+        setRun(nextRun);
+        setBatterPoured(false);
+        setServing(false);
+        setToast(result);
+      },
+      save.reducedMotion ? 220 : 1050,
+    );
   };
   const continueAfterResult = () => {
     setToast(null);
@@ -861,6 +944,16 @@ export default function App() {
             </button>
           </section>
           <section className="settings-panel">
+            <h2>摊位音乐</h2>
+            <p>轻柔的五声音阶旋律，营业时播放。</p>
+            <button
+              className="outline-button"
+              onClick={() => setSave((s) => ({ ...s, music: !s.music }))}
+            >
+              音乐：{save.music ? "开启" : "关闭"}
+            </button>
+          </section>
+          <section className="settings-panel">
             <h2>本地存档</h2>
             <p>
               进度自动保存在当前浏览器。可导出 JSON 备份，并在其他浏览器导入。
@@ -1069,6 +1162,8 @@ export default function App() {
                   pancake={run.pancake}
                   onPaint={paint}
                   onFold={fold}
+                  onCut={cut}
+                  onBag={bag}
                   scraper={save.upgrades.scraper}
                   poured={batterPoured}
                   reducedMotion={save.reducedMotion}
@@ -1112,6 +1207,32 @@ export default function App() {
                 )}
               </div>
             </section>
+            {run.pancake.stage === "sauce" && (
+              <CounterStation
+                kind="sauce"
+                ids={SAUCES.filter(
+                  (id) => save.ingredients.includes(id) || run.mode === "free",
+                )}
+                onChoose={addIngredient}
+                active={run.pancake.activeSauce}
+                load={run.pancake.brushLoad}
+                actual={run.pancake.sauces}
+                wants={run.order?.wants}
+              />
+            )}
+            {run.pancake.stage === "fill" && (
+              <CounterStation
+                kind="fill"
+                ids={FILLINGS.filter(
+                  (id) => save.ingredients.includes(id) || run.mode === "free",
+                )}
+                onChoose={addIngredient}
+                active={run.pancake.activeFilling}
+                load={run.pancake.fillLoad}
+                actual={run.pancake.fillings}
+                wants={run.order?.wants}
+              />
+            )}
             <aside className="tools-panel">
               <div className="tools-heading">
                 <small>你的操作</small>
@@ -1177,8 +1298,8 @@ export default function App() {
               )}
               {run.pancake.stage === "sauce" && (
                 <>
-                  <p>按小票选择酱料，点一次是一份。</p>
-                  <div className="tool-grid">
+                  <p>点击右侧搪瓷缸蘸酱，再在饼面拖动。刷子变淡后重新蘸取。</p>
+                  <div className="tool-grid station-fallback">
                     {SAUCES.filter(
                       (id) =>
                         save.ingredients.includes(id) || run.mode === "free",
@@ -1206,8 +1327,8 @@ export default function App() {
               )}
               {run.pancake.stage === "fill" && (
                 <>
-                  <p>按小票加料。多加要求需要点击两次。</p>
-                  <div className="tool-grid">
+                  <p>从右侧簸箕抓料，在饼上拖动撒开。多加要求请再抓一把。</p>
+                  <div className="tool-grid station-fallback">
                     {FILLINGS.filter(
                       (id) =>
                         save.ingredients.includes(id) || run.mode === "free",
@@ -1240,12 +1361,26 @@ export default function App() {
                 <p>在铁板上，从左右饼边向中心各拖一次。</p>
               )}
               {run.pancake.stage === "bag" && (
-                <p>最后一步。装袋后顾客会按速度、手艺和订单准确度给出评价。</p>
+                <p>
+                  {run.pancake.cut
+                    ? run.pancake.bagged
+                      ? "纸袋装好了，递给顾客。"
+                      : "从饼中央拖到右侧纸袋。"
+                    : "沿煎饼中线从左向右划过，切成两半。"}
+                </p>
               )}
               <div className="tool-bottom">
                 {run.pancake.stage === "bag" ? (
-                  <button className="primary-button" onClick={serve}>
-                    装袋出餐 ↗
+                  <button
+                    className="primary-button"
+                    onClick={serve}
+                    disabled={!run.pancake.bagged}
+                  >
+                    {run.pancake.bagged
+                      ? "递给顾客 ↗"
+                      : run.pancake.cut
+                        ? "拖入纸袋后出餐"
+                        : "先划开煎饼"}
                   </button>
                 ) : (
                   <button className="primary-button" onClick={nextStage}>

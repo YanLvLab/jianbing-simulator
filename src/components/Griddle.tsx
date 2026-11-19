@@ -1,16 +1,19 @@
 import { useEffect, useRef } from "react";
 import { Pancake, Point } from "../game/engine";
+import rawEggUrl from "../assets/raw-egg.png";
 
 type Props = {
   pancake: Pancake;
   onPaint: (point: Point) => void;
   onFold: (side: "left" | "right") => void;
+  onCut: () => void;
+  onBag: () => void;
   scraper: number;
   poured?: boolean;
   reducedMotion?: boolean;
 };
 type Motion = {
-  kind: "pour" | "egg" | "flip" | "fill" | "fold" | "sauce";
+  kind: "pour" | "egg" | "flip" | "fill" | "fold" | "sauce" | "bag";
   started: number;
   seed: number;
 };
@@ -26,6 +29,8 @@ const pos = (n: number, salt: number) => {
     r = Math.sqrt(rnd(n * 3 + salt * 9)) * 166;
   return [center + Math.cos(a) * r, center + Math.sin(a) * r] as const;
 };
+const rawEgg = new Image();
+rawEgg.src = rawEggUrl;
 
 function drawTrace(
   ctx: CanvasRenderingContext2D,
@@ -226,6 +231,7 @@ function drawPan(
 const batterCache = new WeakMap<Point[], Map<string, HTMLCanvasElement>>();
 const eggCache = new WeakMap<Point[], HTMLCanvasElement>();
 const cookedEggCache = new WeakMap<Point[], HTMLCanvasElement>();
+const foldedSourceCache = new WeakMap<Pancake, HTMLCanvasElement>();
 
 function drawFood(
   ctx: CanvasRenderingContext2D,
@@ -234,6 +240,151 @@ function drawFood(
   motion: Motion | null,
   progress: number,
 ) {
+  if (pancake.folds.length) {
+    let layer = foldedSourceCache.get(pancake);
+    if (!layer) {
+      layer = document.createElement("canvas");
+      layer.width = layer.height = size;
+      drawFood(
+        layer.getContext("2d")!,
+        { ...pancake, folds: [] },
+        scraper,
+        null,
+        1,
+      );
+      foldedSourceCache.set(pancake, layer);
+    }
+    const recentSide = pancake.folds.at(-1);
+    const foldAmount =
+      motion?.kind === "fold" && progress < 1 ? Math.min(1, progress * 1.4) : 1;
+    const left = pancake.folds.includes("left")
+      ? recentSide === "left"
+        ? foldAmount
+        : 1
+      : 0;
+    const right = pancake.folds.includes("right")
+      ? recentSide === "right"
+        ? foldAmount
+        : 1
+      : 0;
+    const bagMotion = pancake.bagged && motion?.kind === "bag" && progress < 1;
+    if (!pancake.bagged || bagMotion) {
+      if (bagMotion) {
+        ctx.save();
+        ctx.translate(progress * 170, -progress * 28);
+        ctx.translate(center, center);
+        ctx.scale(1 - progress * 0.54, 1 - progress * 0.42);
+        ctx.translate(-center, -center);
+      }
+      const leftEdge = 55 + left * 150;
+      const rightEdge = 505 - right * 150;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(center, 88);
+      ctx.bezierCurveTo(rightEdge - 31, 89, rightEdge + 3, 126, rightEdge, 177);
+      ctx.bezierCurveTo(rightEdge - 4, 278, rightEdge + 2, 395, rightEdge - 12, 432);
+      ctx.bezierCurveTo(rightEdge - 31, 484, leftEdge + 31, 484, leftEdge + 12, 432);
+      ctx.bezierCurveTo(leftEdge - 2, 395, leftEdge + 4, 278, leftEdge, 177);
+      ctx.bezierCurveTo(leftEdge - 3, 126, leftEdge + 31, 89, center, 88);
+      ctx.closePath();
+      ctx.shadowColor = "#201c18aa";
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 7;
+      ctx.fillStyle = "#d99e61";
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#9b6338";
+      ctx.stroke();
+      ctx.clip();
+      ctx.drawImage(layer, 0, 0);
+      for (const [side, amount] of [
+        ["left", left],
+        ["right", right],
+      ] as const) {
+        if (!amount) continue;
+        ctx.save();
+        ctx.shadowColor = "#523c2899";
+        ctx.shadowBlur = 14;
+        ctx.shadowOffsetX = side === "left" ? 8 : -8;
+        if (side === "left") {
+          ctx.translate(205, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(
+            layer,
+            55,
+            90,
+            150,
+            380,
+            -150 * amount,
+            90,
+            150 * amount,
+            380,
+          );
+        } else {
+          ctx.translate(355, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(layer, 355, 90, 150, 380, 0, 90, 150 * amount, 380);
+        }
+        ctx.restore();
+      }
+      if (pancake.cut) {
+        ctx.strokeStyle = "#263531";
+        ctx.lineWidth = 13;
+        ctx.beginPath();
+        ctx.moveTo(198, 280);
+        ctx.lineTo(362, 280);
+        ctx.stroke();
+        ctx.strokeStyle = "#f8d99a";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(202, 270);
+        ctx.lineTo(358, 270);
+        ctx.moveTo(202, 290);
+        ctx.lineTo(358, 290);
+        ctx.stroke();
+      }
+      ctx.restore();
+      if (bagMotion) ctx.restore();
+    }
+    if (pancake.stage === "bag") {
+      ctx.save();
+      ctx.translate(455, 275);
+      ctx.fillStyle = pancake.bagged ? "#e2bd82" : "#f1d49f";
+      ctx.strokeStyle = "#966942";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-38, -50);
+      ctx.lineTo(37, -50);
+      ctx.lineTo(30, 62);
+      ctx.quadraticCurveTo(0, 76, -30, 62);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-38, -50);
+      ctx.quadraticCurveTo(0, -68, 37, -50);
+      ctx.stroke();
+      if (pancake.bagged) {
+        ctx.fillStyle = "#b77142";
+        ctx.beginPath();
+        ctx.roundRect(-25, -58, 50, 32, 9);
+        ctx.fill();
+      }
+      ctx.restore();
+      if (!pancake.cut) {
+        ctx.setLineDash([9, 8]);
+        ctx.strokeStyle = "#fff5db";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(195, 280);
+        ctx.lineTo(365, 280);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    return;
+  }
   ctx.save();
   if (motion?.kind === "flip" && progress < 1) {
     const lift = Math.sin(progress * Math.PI);
@@ -313,6 +464,41 @@ function drawFood(
     ctx.lineWidth = 2;
   }
   if (pancake.eggs) {
+    const pooled = Math.max(0, 1 - pancake.eggPaint.length / 24);
+    if (pooled > 0) {
+      ctx.save();
+      ctx.globalAlpha = pooled;
+      for (let egg = 0; egg < pancake.eggs; egg++) {
+        const x = center + (egg - (pancake.eggs - 1) / 2) * 39;
+        const arriving =
+          motion?.kind === "egg" && progress < 1 && egg === pancake.eggs - 1;
+        if (arriving && progress < 0.35) continue;
+        if (rawEgg.complete && rawEgg.naturalWidth) {
+          const bloom = arriving ? Math.min(1, (progress - 0.35) * 3.3) : 1;
+          ctx.drawImage(
+            rawEgg,
+            x - 115 * bloom,
+            center - 100 * bloom,
+            230 * bloom,
+            153 * bloom,
+          );
+          continue;
+        }
+        ctx.fillStyle = "#fff9e7";
+        ctx.beginPath();
+        for (let i = 0; i <= 18; i++) {
+          const a = (i * Math.PI * 2) / 18;
+          const r = 29 + rnd(i * 7 + egg * 11) * 10;
+          const px = x + Math.cos(a) * r,
+            py = center - 20 + Math.sin(a) * r * 0.72;
+          if (!i) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
     const cookedEgg = !["egg", "flip"].includes(pancake.stage);
     const cache = cookedEgg ? cookedEggCache : eggCache;
     let eggMask = cache.get(pancake.eggPaint);
@@ -352,18 +538,25 @@ function drawFood(
     ctx.globalAlpha = cookedEgg ? 0.7 : 0.83;
     ctx.drawImage(eggMask, 0, 0);
     ctx.globalAlpha = 1;
-    const yolkVisibility = Math.max(0, 1 - pancake.eggPaint.length / 24);
+    const yolkVisibility =
+      rawEgg.complete && rawEgg.naturalWidth
+        ? 0
+        : Math.max(0, 1 - pancake.eggPaint.length / 24);
     ctx.globalAlpha = yolkVisibility;
     for (let i = 0; i < pancake.eggs; i++) {
       const x = center + (i - (pancake.eggs - 1) / 2) * 39,
         y = center - 20;
+      const arriving =
+        motion?.kind === "egg" && progress < 1 && i === pancake.eggs - 1;
+      if (arriving && progress < 0.36) continue;
+      const bloom = arriving ? Math.min(1, (progress - 0.36) * 3.6) : 1;
       const g = ctx.createRadialGradient(x - 5, y - 6, 2, x, y, 20);
       g.addColorStop(0, "#ffe394");
       g.addColorStop(0.5, "#f4b945");
       g.addColorStop(1, "#cd7d2c");
       ctx.fillStyle = g;
       ctx.beginPath();
-      ctx.ellipse(x, y, 19, 16, 0.2, 0, 7);
+      ctx.ellipse(x, y, 19 * bloom, 16 * bloom, 0.2, 0, 7);
       ctx.fill();
       ctx.strokeStyle = "#fce1a4";
       ctx.lineWidth = 2;
@@ -385,14 +578,26 @@ function drawFood(
     ctx.beginPath();
     ctx.arc(center, center, radius - 8, 0, 7);
     ctx.clip();
-    if (trace.length > 1) {
-      ctx.beginPath();
+    if (trace.length) {
+      if (trace.length === 1) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(trace[0].x * size, trace[0].y * size, 7, 5, -0.3, 0, 7);
+        ctx.fill();
+      }
       trace.forEach((p, i) => {
-        if (!i || Math.hypot(p.x - trace[i - 1].x, p.y - trace[i - 1].y) > 0.15)
-          ctx.moveTo(p.x * size, p.y * size);
-        else ctx.lineTo(p.x * size, p.y * size);
+        if (!i) return;
+        if (Math.hypot(p.x - trace[i - 1].x, p.y - trace[i - 1].y) > 0.15)
+          return;
+        ctx.globalAlpha = Math.max(0.15, p.strength ?? 1);
+        ctx.lineWidth =
+          (id === "garlic" ? 15 : 21) * Math.max(0.28, p.strength ?? 1);
+        ctx.beginPath();
+        ctx.moveTo(trace[i - 1].x * size, trace[i - 1].y * size);
+        ctx.lineTo(p.x * size, p.y * size);
+        ctx.stroke();
       });
-      ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.restore();
       continue;
     }
@@ -416,6 +621,27 @@ function drawFood(
     ctx.restore();
   }
   for (const [id, count] of Object.entries(pancake.fillings)) {
+    const drops =
+      pancake.fillingDrops?.[id as keyof typeof pancake.fillingDrops] ?? [];
+    if (drops.length) {
+      drops.forEach((drop, i) => {
+        for (let j = 0; j < (id === "crispy" || id === "ham" ? 1 : 2); j++) {
+          const x = drop.x * size + (rnd(i * 13 + j * 7) - 0.5) * 22;
+          const y = drop.y * size + (rnd(i * 9 + j * 5) - 0.5) * 22;
+          const recent =
+            motion?.kind === "fill" && i >= drops.length - 5 && progress < 1;
+          ingredient(
+            ctx,
+            id,
+            x,
+            y - (recent ? (1 - progress) * 110 : 0),
+            i * 2 + j + id.length,
+            recent ? Math.max(0.2, progress) : 0.65 + rnd(i + j) * 0.45,
+          );
+        }
+      });
+      continue;
+    }
     const pieces = (count ?? 0) * (id === "crispy" || id === "ham" ? 7 : 20);
     for (let i = 0; i < pieces; i++) {
       const [x, y] = pos(i, id.length * 19 + (count ?? 0) * 3);
@@ -474,19 +700,50 @@ function drawFood(
       false,
     );
   if (motion?.kind === "egg" && progress < 1) {
-    const y = 80 + progress * 120;
+    const y = 68 + Math.min(progress, 0.38) * 410;
     ctx.fillStyle = "#fff6d9";
     ctx.strokeStyle = "#bda77c";
     ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(center, y, 17, 22, 0.3, 0, 7);
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(center - 12, y + 4);
-    ctx.lineTo(center + 5, y - 2);
-    ctx.lineTo(center + 13, y + 10);
-    ctx.stroke();
+    if (progress < 0.68) {
+      const split = Math.max(0, (progress - 0.32) * 90);
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(
+          center + side * split,
+          y - Math.max(0, progress - 0.4) * 95,
+        );
+        ctx.rotate(side * Math.max(0, progress - 0.3) * 0.9);
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.quadraticCurveTo(side * 21, -10, side * 15, 8);
+        ctx.lineTo(side * 5, 15);
+        ctx.lineTo(0, 7);
+        ctx.lineTo(-side * 5, 15);
+        ctx.quadraticCurveTo(-side * 10, -1, 0, -20);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+    if (progress > 0.3 && progress < 0.75) {
+      const splash = (progress - 0.3) / 0.45;
+      ctx.fillStyle = `rgba(255,247,221,${(1 - splash) * 0.75})`;
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI * 2) / 8 + rnd(i * 9) * 0.6;
+        const dist = 16 + splash * (17 + rnd(i + 24) * 20);
+        ctx.beginPath();
+        ctx.ellipse(
+          center + Math.cos(a) * dist,
+          center - 20 + Math.sin(a) * dist * 0.8,
+          2 + rnd(i + 7) * 3,
+          1.5 + rnd(i + 8) * 2,
+          a,
+          0,
+          7,
+        );
+        ctx.fill();
+      }
+    }
   }
   if (motion?.kind === "pour" && progress < 1) {
     ctx.strokeStyle = "#e9cc93";
@@ -543,6 +800,8 @@ export default function Griddle({
   pancake,
   onPaint,
   onFold,
+  onCut,
+  onBag,
   scraper,
   poured = false,
   reducedMotion = false,
@@ -550,6 +809,7 @@ export default function Griddle({
   const canvas = useRef<HTMLCanvasElement>(null),
     dragging = useRef(false),
     foldStart = useRef<"left" | "right" | null>(null),
+    bagAction = useRef<"cut" | "bag" | null>(null),
     cursor = useRef<Point | null>(null),
     previous = useRef<Pancake | null>(null),
     motion = useRef<Motion | null>(null);
@@ -568,10 +828,18 @@ export default function Griddle({
     if (pancake.stage === "fold") {
       const side = p.x < 0.38 ? "left" : p.x > 0.62 ? "right" : null;
       foldStart.current = side && !pancake.folds.includes(side) ? side : null;
+    } else if (pancake.stage === "bag") {
+      bagAction.current =
+        !pancake.cut && p.x < 0.44 && p.y > 0.35 && p.y < 0.65
+          ? "cut"
+          : pancake.cut && !pancake.bagged && p.x > 0.34 && p.x < 0.66
+            ? "bag"
+            : null;
     } else if (
       (pancake.stage === "spread" && poured) ||
       (pancake.stage === "egg" && pancake.eggs > 0) ||
-      pancake.stage === "sauce"
+      (pancake.stage === "sauce" && pancake.brushLoad > 0) ||
+      (pancake.stage === "fill" && pancake.fillLoad > 0)
     ) {
       dragging.current = true;
       onPaint(p);
@@ -586,8 +854,16 @@ export default function Griddle({
       const p = point(e);
       if (p.x > 0.39 && p.x < 0.62) onFold(foldStart.current);
     }
+    if (bagAction.current) {
+      const p = point(e);
+      if (bagAction.current === "cut" && p.x > 0.58 && p.y > 0.35 && p.y < 0.65)
+        onCut();
+      if (bagAction.current === "bag" && p.x > 0.79 && p.y > 0.25 && p.y < 0.76)
+        onBag();
+    }
     dragging.current = false;
     foldStart.current = null;
+    bagAction.current = null;
     cursor.current = null;
   };
   useEffect(() => {
@@ -597,6 +873,7 @@ export default function Griddle({
       if (prev.stage === "flip" && pancake.stage === "sauce") kind = "flip";
       else if (pancake.eggs > prev.eggs) kind = "egg";
       else if (pancake.folds.length > prev.folds.length) kind = "fold";
+      else if (pancake.bagged && !prev.bagged) kind = "bag";
       else if (
         Object.values(pancake.fillings).reduce((a, b) => a + (b ?? 0), 0) >
         Object.values(prev.fillings).reduce((a, b) => a + (b ?? 0), 0)
@@ -630,7 +907,10 @@ export default function Griddle({
           : 1;
       drawPan(ctx, pancake.heat, now, reduced);
       drawFood(ctx, pancake, scraper, m, progress);
-      if (cursor.current && ["spread", "egg", "sauce"].includes(pancake.stage))
+      if (
+        cursor.current &&
+        ["spread", "egg", "sauce", "fill"].includes(pancake.stage)
+      )
         drawTool(
           ctx,
           cursor.current.x * size,
