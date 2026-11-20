@@ -24,7 +24,7 @@ try {
       path: `tests/v2-game-${name}.png`,
       fullPage: true,
     });
-    await page.getByRole("button", { name: /倒入面糊/ }).click();
+    await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
     const b = await page.locator("canvas").boundingBox();
     if (!b) throw Error("No canvas");
     await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.5);
@@ -49,13 +49,20 @@ try {
     await page.locator(".level-card").first().click();
     await page.screenshot({
       path: `tests/v2-customer-${name}.png`,
-      fullPage: true,
+      fullPage: name !== "mobile",
     });
     if (name === "mobile") {
-      await page.locator(".tools-panel").scrollIntoViewIfNeeded();
-      const ribbon = await page.locator(".mobile-order-ribbon").boundingBox();
-      if (!ribbon || ribbon.y > 50 || ribbon.y + ribbon.height < 0)
-        throw Error("Mobile order is not visible while using tools");
+      const ticket = await page.locator(".customer-details").boundingBox();
+      const button = await page
+        .getByRole("button", { name: "倒入面糊", exact: true })
+        .boundingBox();
+      if (
+        !ticket ||
+        !button ||
+        ticket.y < 0 ||
+        button.y + button.height > height
+      )
+        throw Error("Mobile order or controls are outside the viewport");
       await page.screenshot({ path: "tests/v2-mobile-order-in-use.png" });
     }
     console.log(`PASS: ${name} scene, griddle and spread rendered`);

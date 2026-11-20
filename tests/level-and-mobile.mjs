@@ -24,13 +24,22 @@ const draw = async () => {
   await page.mouse.up();
 };
 const make = async () => {
-  await click(/倒入面糊/);
+  await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
   await draw();
   await click(/下一步：打蛋/);
-  await click(/打一个鸡蛋/);
+  await page.locator(".tool-main").click();
   await draw();
   await click(/下一步：翻面/);
-  await page.waitForTimeout(8200);
+  await page.waitForFunction(
+    () =>
+      Number(
+        document
+          .querySelector(".heat-meter span")
+          ?.textContent?.match(/\d+/)?.[0],
+      ) >= 60,
+    null,
+    { timeout: 12000 },
+  );
   await click(/现在翻面/);
   await page
     .locator(".counter-station.sauce")
@@ -132,7 +141,21 @@ try {
   await mobile.goto(base);
   await mobile.screenshot({ path: "tests/menu-mobile.png", fullPage: true });
   await mobile.getByRole("button", { name: "先练练手" }).click();
-  await mobile.getByRole("button", { name: /倒入面糊/ }).click();
+  const mobilePan = await mobile.locator("canvas").boundingBox();
+  const mobilePour = await mobile
+    .getByRole("button", { name: "倒入面糊", exact: true })
+    .boundingBox();
+  const mobileNext = mobile.getByRole("button", { name: /先倒入面糊/ });
+  if (
+    !mobilePan ||
+    !mobilePour ||
+    mobilePan.y + mobilePan.height > 844 ||
+    mobilePour.y + mobilePour.height > 844
+  )
+    throw new Error("Mobile pan or pour button is below the viewport");
+  if (await mobileNext.isEnabled())
+    throw new Error("Next stage should wait for batter");
+  await mobile.getByRole("button", { name: "倒入面糊", exact: true }).click();
   const mb = await mobile.locator("canvas").boundingBox();
   if (!mb) throw new Error("Mobile griddle missing");
   await mobile.touchscreen.tap(mb.x + mb.width / 2, mb.y + mb.height / 2);
@@ -140,7 +163,7 @@ try {
     (await mobile.locator(".work-instruction").innerText()).includes("覆盖 0%")
   )
     throw new Error("Touch did not paint");
-  await mobile.screenshot({ path: "tests/game-mobile.png", fullPage: true });
+  await mobile.screenshot({ path: "tests/game-mobile.png" });
   console.log("PASS: mobile touch hits the griddle");
   await mobile.close();
 } finally {

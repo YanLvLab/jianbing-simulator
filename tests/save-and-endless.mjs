@@ -68,7 +68,7 @@ try {
     throw new Error("Corrupt save did not recover");
   console.log("PASS: reset and corrupt-save recovery");
   await page.getByRole("button", { name: "先练练手" }).click();
-  await page.getByRole("button", { name: /倒入面糊/ }).click();
+  await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
   const b = await page.locator("canvas").boundingBox();
   await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.5);
   await page.mouse.down();

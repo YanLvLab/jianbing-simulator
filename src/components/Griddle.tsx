@@ -29,6 +29,21 @@ const pos = (n: number, salt: number) => {
     r = Math.sqrt(rnd(n * 3 + salt * 9)) * 166;
   return [center + Math.cos(a) * r, center + Math.sin(a) * r] as const;
 };
+function pancakeOutline(ctx: CanvasRenderingContext2D, edge: number) {
+  ctx.beginPath();
+  for (let i = 0; i <= 96; i++) {
+    const angle = (i / 96) * Math.PI * 2;
+    const wobble =
+      Math.sin(angle * 7 + 0.8) * 2.7 +
+      Math.sin(angle * 19 + 1.6) * 1.6 +
+      (rnd(i * 13 + 5) - 0.5) * 2;
+    const x = center + Math.cos(angle) * (edge + wobble);
+    const y = center + Math.sin(angle) * (edge + wobble);
+    if (!i) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
 const rawEgg = new Image();
 rawEgg.src = rawEggUrl;
 
@@ -282,8 +297,22 @@ function drawFood(
       ctx.beginPath();
       ctx.moveTo(center, 88);
       ctx.bezierCurveTo(rightEdge - 31, 89, rightEdge + 3, 126, rightEdge, 177);
-      ctx.bezierCurveTo(rightEdge - 4, 278, rightEdge + 2, 395, rightEdge - 12, 432);
-      ctx.bezierCurveTo(rightEdge - 31, 484, leftEdge + 31, 484, leftEdge + 12, 432);
+      ctx.bezierCurveTo(
+        rightEdge - 4,
+        278,
+        rightEdge + 2,
+        395,
+        rightEdge - 12,
+        432,
+      );
+      ctx.bezierCurveTo(
+        rightEdge - 31,
+        484,
+        leftEdge + 31,
+        484,
+        leftEdge + 12,
+        432,
+      );
       ctx.bezierCurveTo(leftEdge - 2, 395, leftEdge + 4, 278, leftEdge, 177);
       ctx.bezierCurveTo(leftEdge - 3, 126, leftEdge + 31, 89, center, 88);
       ctx.closePath();
@@ -388,9 +417,10 @@ function drawFood(
   ctx.save();
   if (motion?.kind === "flip" && progress < 1) {
     const lift = Math.sin(progress * Math.PI);
-    ctx.translate(center, -lift * 115);
-    ctx.translate(-center, 0);
-    ctx.transform(1, 0, 0, 1 - lift * 0.92, 0, center * lift * 0.48);
+    ctx.translate(0, -lift * 42);
+    ctx.translate(0, center);
+    ctx.transform(1, 0, lift * 0.08, 1 - lift * 0.86, 0, 0);
+    ctx.translate(0, -center);
   }
   const burn = pancake.flipHeat > 90 || pancake.heat > 105;
   const key = `${pancake.batterType}-${pancake.stage === "spread"}-${burn}-${scraper}`;
@@ -405,8 +435,7 @@ function drawFood(
     mask.width = mask.height = size;
     const m = mask.getContext("2d")!;
     m.save();
-    m.beginPath();
-    m.arc(center, center, radius, 0, 7);
+    pancakeOutline(m, radius);
     m.clip();
     if (pancake.batter.length)
       drawTrace(m, pancake.batter, 86 + scraper * 13, "#e9cc93");
@@ -452,6 +481,27 @@ function drawFood(
         );
         m.fill();
       }
+      if (toasted) {
+        for (let i = 0; i < 90; i++) {
+          const [x, y] = pos(i + 701, 17);
+          m.fillStyle = `rgba(127,67,32,${0.035 + rnd(i + 505) * 0.09})`;
+          m.beginPath();
+          m.ellipse(
+            x,
+            y,
+            7 + rnd(i + 31) * 13,
+            2 + rnd(i + 48) * 7,
+            rnd(i + 87) * 7,
+            0,
+            7,
+          );
+          m.fill();
+        }
+      }
+      m.strokeStyle = toasted ? "#9c62304d" : "#fff1c970";
+      m.lineWidth = toasted ? 9 : 5;
+      pancakeOutline(m, radius - 3);
+      m.stroke();
       m.globalCompositeOperation = "source-over";
     }
     variants.set(key, mask);
@@ -697,7 +747,7 @@ function drawFood(
       ctx,
       495 - progress * 125,
       440 - Math.sin(progress * Math.PI) * 90,
-      false,
+      "spatula",
     );
   if (motion?.kind === "egg" && progress < 1) {
     const y = 68 + Math.min(progress, 0.38) * 410;
@@ -772,27 +822,105 @@ function drawTool(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
-  sauce: boolean,
+  tool: "scraper" | "spatula" | "brush" | "pinch" | "knife",
+  sauceColor = "#75472e",
 ) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(-0.5);
-  ctx.fillStyle = "#a56a3e";
-  ctx.strokeStyle = "#543a2b";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.roundRect(-7, -69, 14, 67, 5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = sauce ? "#85412e" : "#a9b5ad";
-  ctx.beginPath();
-  ctx.moveTo(-26, -5);
-  ctx.lineTo(27, -5);
-  ctx.lineTo(34, 12);
-  ctx.quadraticCurveTo(0, 21, -34, 12);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
+  ctx.rotate(tool === "knife" ? -0.85 : -0.5);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  if (tool === "pinch") {
+    ctx.fillStyle = "#c66745";
+    ctx.beginPath();
+    ctx.moveTo(18, -62);
+    ctx.lineTo(42, -49);
+    ctx.lineTo(21, -18);
+    ctx.lineTo(5, -27);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#e2ad7d";
+    ctx.strokeStyle = "#8f573a";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(8, -33);
+    ctx.bezierCurveTo(-5, -26, -12, -14, -4, -7);
+    ctx.bezierCurveTo(2, -2, 9, -11, 13, -13);
+    ctx.bezierCurveTo(24, -5, 29, -10, 25, -19);
+    ctx.bezierCurveTo(21, -26, 14, -28, 8, -33);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(3, -8);
+    ctx.quadraticCurveTo(9, -18, 17, -16);
+    ctx.stroke();
+  } else if (tool === "brush") {
+    ctx.fillStyle = "#a96a3c";
+    ctx.strokeStyle = "#6b412d";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-4, -75);
+    ctx.quadraticCurveTo(0, -81, 5, -75);
+    ctx.lineTo(5, -6);
+    ctx.lineTo(-4, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#c5b58f";
+    ctx.fillRect(-6, -12, 13, 11);
+    ctx.fillStyle = sauceColor;
+    ctx.beginPath();
+    ctx.moveTo(-10, -2);
+    ctx.quadraticCurveTo(0, 5, 10, -2);
+    ctx.lineTo(7, 16);
+    ctx.quadraticCurveTo(0, 22, -7, 16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "#efd9b0a8";
+    ctx.lineWidth = 1;
+    for (let i = -5; i <= 5; i += 3) {
+      ctx.beginPath();
+      ctx.moveTo(i, 2);
+      ctx.lineTo(i * 0.7, 15);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = "#a56a3e";
+    ctx.strokeStyle = "#543a2b";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(-7, -69, 14, 67, 5);
+    ctx.fill();
+    ctx.stroke();
+    const metal = ctx.createLinearGradient(-34, 0, 34, 0);
+    metal.addColorStop(0, "#64716d");
+    metal.addColorStop(0.4, "#d9ded2");
+    metal.addColorStop(1, "#788b84");
+    ctx.fillStyle = metal;
+    ctx.beginPath();
+    if (tool === "knife") {
+      ctx.moveTo(-2, -4);
+      ctx.lineTo(50, -1);
+      ctx.quadraticCurveTo(65, 6, 43, 11);
+      ctx.lineTo(-2, 8);
+    } else {
+      const width = tool === "spatula" ? 40 : 32;
+      ctx.moveTo(-width + 6, -5);
+      ctx.lineTo(width - 6, -5);
+      ctx.lineTo(width, 12);
+      ctx.quadraticCurveTo(0, 21, -width, 12);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "#fff9e499";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tool === "knife" ? 8 : -20, 3);
+    ctx.lineTo(tool === "knife" ? 48 : 21, 3);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -811,6 +939,7 @@ export default function Griddle({
     foldStart = useRef<"left" | "right" | null>(null),
     bagAction = useRef<"cut" | "bag" | null>(null),
     cursor = useRef<Point | null>(null),
+    repaint = useRef<(() => void) | null>(null),
     previous = useRef<Pancake | null>(null),
     motion = useRef<Motion | null>(null);
   const point = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
@@ -825,6 +954,7 @@ export default function Griddle({
     e.currentTarget.setPointerCapture(e.pointerId);
     const p = point(e);
     cursor.current = p;
+    repaint.current?.();
     if (pancake.stage === "fold") {
       const side = p.x < 0.38 ? "left" : p.x > 0.62 ? "right" : null;
       foldStart.current = side && !pancake.folds.includes(side) ? side : null;
@@ -848,6 +978,7 @@ export default function Griddle({
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
     cursor.current = point(e);
     if (dragging.current) onPaint(cursor.current);
+    else repaint.current?.();
   };
   const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (foldStart.current) {
@@ -865,6 +996,7 @@ export default function Griddle({
     foldStart.current = null;
     bagAction.current = null;
     cursor.current = null;
+    repaint.current?.();
   };
   useEffect(() => {
     const prev = previous.current;
@@ -907,20 +1039,33 @@ export default function Griddle({
           : 1;
       drawPan(ctx, pancake.heat, now, reduced);
       drawFood(ctx, pancake, scraper, m, progress);
-      if (
-        cursor.current &&
-        ["spread", "egg", "sauce", "fill"].includes(pancake.stage)
-      )
+      if (cursor.current && pancake.stage !== "flip")
         drawTool(
           ctx,
           cursor.current.x * size,
           cursor.current.y * size,
-          pancake.stage === "sauce",
+          pancake.stage === "sauce"
+            ? "brush"
+            : pancake.stage === "fill" ||
+                (pancake.stage === "bag" && pancake.cut)
+              ? "pinch"
+              : pancake.stage === "bag"
+                ? "knife"
+                : "scraper",
+          pancake.activeSauce === "chili"
+            ? "#b73529"
+            : pancake.activeSauce === "garlic"
+              ? "#e1cc91"
+              : "#703f2c",
         );
       if (progress < 1 && !reduced) frame = requestAnimationFrame(render);
     };
+    repaint.current = () => render(performance.now());
     render(performance.now());
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      repaint.current = null;
+      cancelAnimationFrame(frame);
+    };
   }, [pancake, scraper, poured, reducedMotion]);
   return (
     <div

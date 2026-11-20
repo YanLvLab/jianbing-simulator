@@ -20,7 +20,7 @@ try {
     )?.includes("selected")
   )
     throw new Error("Batter selection failed");
-  await page.getByRole("button", { name: /倒入面糊/ }).click();
+  await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
   await page.waitForTimeout(180);
   await page.screenshot({ path: "tests/v2-anim-pour.png" });
   const canvas = page.locator("canvas");
@@ -42,7 +42,7 @@ try {
     }
   await page.mouse.up();
   await page.getByRole("button", { name: /下一步：打蛋/ }).click();
-  await page.getByRole("button", { name: /打一个鸡蛋/ }).click();
+  await page.locator(".tool-main").click();
   await page.waitForTimeout(450);
   await page.screenshot({ path: "tests/v2-anim-egg.png" });
   await page.mouse.move(pt(0.5, 0.5).x, pt(0.5, 0.5).y);
@@ -58,7 +58,16 @@ try {
   await page.mouse.up();
   await page.screenshot({ path: "tests/v2-egg-spread.png" });
   await page.getByRole("button", { name: /下一步：翻面/ }).click();
-  await page.waitForTimeout(8500);
+  await page.waitForFunction(
+    () =>
+      Number(
+        document
+          .querySelector(".heat-meter span")
+          ?.textContent?.match(/\d+/)?.[0],
+      ) >= 60,
+    null,
+    { timeout: 12000 },
+  );
   const heat = await page.locator(".heat-meter").boundingBox();
   const toolBar = await page.locator(".tools-panel").boundingBox();
   if (!heat || !toolBar || heat.y + heat.height >= toolBar.y)

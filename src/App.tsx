@@ -208,8 +208,11 @@ export default function App() {
           elapsed: current.pancake.elapsed + delta,
           heat:
             current.pancake.stage === "flip"
-              ? current.pancake.heat + delta * 7.5
-              : current.pancake.heat,
+              ? current.pancake.heat + delta * 11.5
+              : ["spread", "egg"].includes(current.pancake.stage) &&
+                  current.pancake.batter.length > 0
+                ? Math.min(45, current.pancake.heat + delta * 4.5)
+                : current.pancake.heat,
         };
         if (secondsLeft <= 0)
           return {
@@ -452,7 +455,7 @@ export default function App() {
     if (p.stage === "flip") {
       updatePancake(
         { stage: "sauce", flipHeat: p.heat },
-        "按订单刷酱。每点一次增加一份。",
+        "点击搪瓷缸蘸酱，再沿饼面拖动刷开。",
         "flip",
       );
       return;
@@ -465,8 +468,8 @@ export default function App() {
           spread: "倒入面糊，在铁板上摊开。",
           egg: "点鸡蛋打入铁板，再拖动蛋液。",
           flip: "观察火候条，在绿色区间翻面。",
-          sauce: "按订单刷酱。每点一次增加一份。",
-          fill: "按订单加入配料。需要加倍就点两次。",
+          sauce: "点击搪瓷缸蘸酱，再沿饼面拖动刷开。",
+          fill: "点击簸箕抓料，沿饼面拖动撒开。",
           fold: "从左右饼边分别拖向中心。",
           bag: "横划中线切断，再把煎饼拖入右侧纸袋。",
         }[next],
@@ -670,6 +673,24 @@ export default function App() {
     setResetSecond(false);
     setNotice("存档已重置。");
   };
+
+  const stepRequirement = !run
+    ? ""
+    : run.pancake.stage === "spread"
+      ? !batterPoured
+        ? "先倒入面糊"
+        : batterCoverage(run.pancake, save.upgrades.scraper) < 0.38
+          ? `摊面 ${Math.round(batterCoverage(run.pancake, save.upgrades.scraper) * 100)}% / 38%`
+          : ""
+      : run.pancake.stage === "egg"
+        ? run.pancake.eggs < 1
+          ? "先打一个鸡蛋"
+          : eggCoverage(run.pancake) < 0.28
+            ? `涂蛋 ${Math.round(eggCoverage(run.pancake) * 100)}% / 28%`
+            : ""
+        : run.pancake.stage === "fold" && run.pancake.folds.length < 2
+          ? `折边 ${run.pancake.folds.length} / 2`
+          : "";
 
   return (
     <div className={`app-shell ${save.reducedMotion ? "reduce-motion" : ""}`}>
@@ -1185,7 +1206,8 @@ export default function App() {
                 {run.pancake.stage === "egg" && (
                   <small>
                     蛋液覆盖 {Math.round(eggCoverage(run.pancake) * 100)}% ·
-                    已打 {run.pancake.eggs} 个
+                    已打 {run.pancake.eggs} 个 · 铁板预热{" "}
+                    {Math.round(run.pancake.heat)}%
                   </small>
                 )}
                 {run.pancake.stage === "flip" && (
@@ -1383,12 +1405,19 @@ export default function App() {
                         : "先划开煎饼"}
                   </button>
                 ) : (
-                  <button className="primary-button" onClick={nextStage}>
-                    {run.pancake.stage === "flip"
-                      ? "现在翻面 ↗"
-                      : run.pancake.stage === "fold"
-                        ? "折好了，装袋 ↗"
-                        : `下一步：${STAGE_NAMES[STAGES[STAGES.indexOf(run.pancake.stage) + 1]]} ↗`}
+                  <button
+                    className="primary-button"
+                    onClick={nextStage}
+                    disabled={!!stepRequirement}
+                    aria-label={stepRequirement || undefined}
+                  >
+                    {stepRequirement
+                      ? stepRequirement
+                      : run.pancake.stage === "flip"
+                        ? "现在翻面 ↗"
+                        : run.pancake.stage === "fold"
+                          ? "折好了，装袋 ↗"
+                          : `下一步：${STAGE_NAMES[STAGES[STAGES.indexOf(run.pancake.stage) + 1]]} ↗`}
                   </button>
                 )}
                 <button
