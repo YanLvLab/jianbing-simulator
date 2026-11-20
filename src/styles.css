@@ -848,9 +848,6 @@ button:focus-visible {
   touch-action: none;
   cursor: crosshair;
 }
-.griddle-wrap.fold-cursor canvas {
-  cursor: grab;
-}
 .heat-glow {
   position: absolute;
   inset: 12%;

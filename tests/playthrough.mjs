@@ -47,6 +47,7 @@ try {
   await page.screenshot({ path: "tests/v2-anim-egg.png" });
   await page.mouse.move(pt(0.5, 0.5).x, pt(0.5, 0.5).y);
   await page.mouse.down();
+  let eggMidCaptured = false;
   for (let radius = 0.04; radius <= 0.34; radius += 0.05)
     for (let i = 0; i <= 28; i++) {
       const a = (i / 28) * Math.PI * 2;
@@ -54,6 +55,10 @@ try {
         pt(0.5 + Math.cos(a) * radius, 0.5 + Math.sin(a) * radius).x,
         pt(0.5 + Math.cos(a) * radius, 0.5 + Math.sin(a) * radius).y,
       );
+      if (!eggMidCaptured && radius >= 0.19 && i === 14) {
+        await page.screenshot({ path: "tests/v5-egg-mid-stroke.png" });
+        eggMidCaptured = true;
+      }
     }
   await page.mouse.up();
   await page.screenshot({ path: "tests/v2-egg-spread.png" });
@@ -127,17 +132,12 @@ try {
     await page.mouse.move(pt(0.65, 0.38).x, pt(0.65, 0.38).y, { steps: 18 });
     await page.mouse.up();
   }
+  await page.screenshot({ path: "tests/v5-herbs-on-pancake.png" });
   await page.getByRole("button", { name: /下一步：折叠/ }).click();
-  await page.mouse.move(pt(0.22, 0.5).x, pt(0.22, 0.5).y);
-  await page.mouse.down();
-  await page.mouse.move(pt(0.48, 0.5).x, pt(0.48, 0.5).y, { steps: 8 });
-  await page.mouse.up();
+  await page.getByRole("button", { name: /折左边/ }).click();
   await page.waitForTimeout(140);
   await page.screenshot({ path: "tests/v2-anim-fold.png" });
-  await page.mouse.move(pt(0.78, 0.5).x, pt(0.78, 0.5).y);
-  await page.mouse.down();
-  await page.mouse.move(pt(0.52, 0.5).x, pt(0.52, 0.5).y, { steps: 8 });
-  await page.mouse.up();
+  await page.getByRole("button", { name: /折右边/ }).click();
   await page.waitForTimeout(750);
   await page.screenshot({ path: "tests/v3-folded-final.png" });
   await page.getByRole("button", { name: /折好了，装袋/ }).click();
@@ -151,8 +151,9 @@ try {
   await page.mouse.down();
   await page.mouse.move(pt(0.84, 0.5).x, pt(0.84, 0.5).y, { steps: 12 });
   await page.mouse.up();
+  await page.waitForTimeout(760);
   await page.screenshot({ path: "tests/v3-bagged.png" });
-  await page.getByRole("button", { name: /递给顾客/ }).click();
+  await page.getByRole("button", { name: "完成试吃" }).click();
   await page.waitForTimeout(180);
   await page.screenshot({ path: "tests/v2-anim-bag.png" });
   await page.waitForTimeout(170);

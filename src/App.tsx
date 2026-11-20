@@ -15,6 +15,7 @@ import CustomerPortrait from "./components/CustomerPortrait";
 import IngredientArt from "./components/IngredientArt";
 import CounterProps from "./components/CounterProps";
 import CounterStation from "./components/CounterStation";
+import FinishedJianbing from "./components/FinishedJianbing";
 import {
   batterCoverage,
   eggCoverage,
@@ -35,6 +36,7 @@ import {
   SAVE_KEY,
 } from "./systems/save";
 import { playSound, startMusic, Sound } from "./systems/sound";
+import { getStepGate } from "./game/workflow";
 
 type Screen = "menu" | "levels" | "shop" | "settings" | "achievements" | "game";
 const ACHIEVEMENTS = [
@@ -395,7 +397,7 @@ export default function App() {
               : p.fillings,
             fillingDrops: {
               ...p.fillingDrops,
-              [p.activeFilling]: [...previous, point],
+              [p.activeFilling]: [...previous, { ...point, at: Date.now() }],
             },
             fillLoad: Math.max(0, p.fillLoad - 0.055),
             fillFresh: false,
@@ -421,7 +423,11 @@ export default function App() {
     updatePancake({ cut: true }, "沿中线切开了。把两半拖到右侧纸袋。", "cut");
   };
   const bag = () => {
-    updatePancake({ bagged: true }, "纸袋装好了，递给顾客！", "bag");
+    updatePancake(
+      { bagged: true },
+      "纸袋装好了，点击顾客头顶的煎饼交餐！",
+      "bag",
+    );
   };
   const updatePancake = (
     patch: Partial<Run["pancake"]>,
@@ -437,19 +443,9 @@ export default function App() {
     if (!run) return;
     const p = run.pancake,
       index = STAGES.indexOf(p.stage);
-    if (
-      p.stage === "spread" &&
-      batterCoverage(p, save.upgrades.scraper) < 0.38
-    ) {
-      setNotice("面糊还没摊开，继续拖动刮板。");
-      return;
-    }
-    if (p.stage === "egg" && (p.eggs < 1 || eggCoverage(p) < 0.28)) {
-      setNotice("先打蛋，再拖动蛋液铺开。");
-      return;
-    }
-    if (p.stage === "fold" && p.folds.length < 2) {
-      setNotice("从左右饼边向中心各拖一次。");
+    const gate = getStepGate(p, batterPoured, save.upgrades.scraper);
+    if (!gate.ready) {
+      setNotice(gate.notice);
       return;
     }
     if (p.stage === "flip") {
@@ -470,7 +466,7 @@ export default function App() {
           flip: "观察火候条，在绿色区间翻面。",
           sauce: "点击搪瓷缸蘸酱，再沿饼面拖动刷开。",
           fill: "点击簸箕抓料，沿饼面拖动撒开。",
-          fold: "从左右饼边分别拖向中心。",
+          fold: "依次点击折左边、折右边，收住配料。",
           bag: "横划中线切断，再把煎饼拖入右侧纸袋。",
         }[next],
         next === "fold" ? "fold" : undefined,
@@ -674,23 +670,9 @@ export default function App() {
     setNotice("存档已重置。");
   };
 
-  const stepRequirement = !run
-    ? ""
-    : run.pancake.stage === "spread"
-      ? !batterPoured
-        ? "先倒入面糊"
-        : batterCoverage(run.pancake, save.upgrades.scraper) < 0.38
-          ? `摊面 ${Math.round(batterCoverage(run.pancake, save.upgrades.scraper) * 100)}% / 38%`
-          : ""
-      : run.pancake.stage === "egg"
-        ? run.pancake.eggs < 1
-          ? "先打一个鸡蛋"
-          : eggCoverage(run.pancake) < 0.28
-            ? `涂蛋 ${Math.round(eggCoverage(run.pancake) * 100)}% / 28%`
-            : ""
-        : run.pancake.stage === "fold" && run.pancake.folds.length < 2
-          ? `折边 ${run.pancake.folds.length} / 2`
-          : "";
+  const stepRequirement = run
+    ? getStepGate(run.pancake, batterPoured, save.upgrades.scraper).label
+    : "";
 
   return (
     <div className={`app-shell ${save.reducedMotion ? "reduce-motion" : ""}`}>
@@ -1026,7 +1008,7 @@ export default function App() {
               <li>点击鸡蛋，再拖动涂开。可多打蛋，但按订单来。</li>
               <li>盯住火候，在绿色区间翻面。</li>
               <li>点击酱料和配料；加倍要求需要点两次。</li>
-              <li>从左右饼边各拖向中心一次，折好后装袋。</li>
+              <li>点击「折左边」「折右边」，收住配料后再装袋。</li>
             </ol>
           </section>
         </main>
@@ -1161,6 +1143,23 @@ export default function App() {
                   <p>没有催单，尽情研究你的招牌配方。</p>
                 </div>
               )}
+              {run.pancake.stage === "bag" &&
+                run.pancake.bagged &&
+                !serving && (
+                  <button
+                    type="button"
+                    className="customer-handoff"
+                    onClick={serve}
+                    aria-label={
+                      run.order
+                        ? `将煎饼递给${run.order.customer.name}`
+                        : "完成试吃"
+                    }
+                  >
+                    <FinishedJianbing />
+                    <span>{run.order ? "点击交餐" : "点击试吃"}</span>
+                  </button>
+                )}
             </aside>
             <section className="workstation">
               <div className="work-top">
@@ -1182,7 +1181,6 @@ export default function App() {
                 <Griddle
                   pancake={run.pancake}
                   onPaint={paint}
-                  onFold={fold}
                   onCut={cut}
                   onBag={bag}
                   scraper={save.upgrades.scraper}
@@ -1380,30 +1378,48 @@ export default function App() {
                 </>
               )}
               {run.pancake.stage === "fold" && (
-                <p>在铁板上，从左右饼边向中心各拖一次。</p>
+                <>
+                  <p>先按按钮折一边，再折另一边。两层饼皮会盖住小料。</p>
+                  <div className="fold-controls" aria-label="折叠煎饼">
+                    <button
+                      type="button"
+                      onClick={() => fold("left")}
+                      disabled={run.pancake.folds.includes("left")}
+                    >
+                      {run.pancake.folds.includes("left")
+                        ? "左边已折 ✓"
+                        : "折左边 ↗"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => fold("right")}
+                      disabled={run.pancake.folds.includes("right")}
+                    >
+                      {run.pancake.folds.includes("right")
+                        ? "右边已折 ✓"
+                        : "折右边 ↖"}
+                    </button>
+                  </div>
+                </>
               )}
               {run.pancake.stage === "bag" && (
                 <p>
                   {run.pancake.cut
                     ? run.pancake.bagged
-                      ? "纸袋装好了，递给顾客。"
+                      ? "纸袋装好了，点击顾客头顶的煎饼递出。"
                       : "从饼中央拖到右侧纸袋。"
                     : "沿煎饼中线从左向右划过，切成两半。"}
                 </p>
               )}
               <div className="tool-bottom">
                 {run.pancake.stage === "bag" ? (
-                  <button
-                    className="primary-button"
-                    onClick={serve}
-                    disabled={!run.pancake.bagged}
-                  >
-                    {run.pancake.bagged
-                      ? "递给顾客 ↗"
-                      : run.pancake.cut
-                        ? "拖入纸袋后出餐"
-                        : "先划开煎饼"}
-                  </button>
+                  run.pancake.bagged ? (
+                    <div className="handoff-prompt">点击顾客头顶煎饼交餐 ↖</div>
+                  ) : (
+                    <button className="primary-button" disabled>
+                      {run.pancake.cut ? "拖入纸袋后出餐" : "先划开煎饼"}
+                    </button>
+                  )
                 ) : (
                   <button
                     className="primary-button"
@@ -1435,10 +1451,7 @@ export default function App() {
           {serving && (
             <div className="serve-animation" aria-label="正在装袋出餐">
               <div className="serve-handoff">
-                <div className="serve-roll" />
-                <div className="serve-paper">
-                  <IngredientArt id="bag" />
-                </div>
+                <FinishedJianbing />
               </div>
               <span>新鲜出炉 · 递给顾客</span>
             </div>

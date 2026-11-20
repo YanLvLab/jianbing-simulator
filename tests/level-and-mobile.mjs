@@ -79,14 +79,8 @@ const make = async () => {
   await click(/下一步：折叠/);
   const b = await page.locator("canvas").boundingBox();
   const pos = (x, y) => [b.x + b.width * x, b.y + b.height * y];
-  await page.mouse.move(...pos(0.22, 0.5));
-  await page.mouse.down();
-  await page.mouse.move(...pos(0.48, 0.5), { steps: 5 });
-  await page.mouse.up();
-  await page.mouse.move(...pos(0.78, 0.5));
-  await page.mouse.down();
-  await page.mouse.move(...pos(0.52, 0.5), { steps: 5 });
-  await page.mouse.up();
+  await click(/折左边/);
+  await click(/折右边/);
   await click(/折好了，装袋/);
   await page.mouse.move(...pos(0.31, 0.5));
   await page.mouse.down();
@@ -96,7 +90,7 @@ const make = async () => {
   await page.mouse.down();
   await page.mouse.move(...pos(0.84, 0.5), { steps: 10 });
   await page.mouse.up();
-  await click(/递给顾客/);
+  await page.locator(".customer-handoff").click();
 };
 try {
   await page.goto(base);
