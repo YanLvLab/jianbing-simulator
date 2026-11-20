@@ -100,6 +100,9 @@ export function loadSave(): Save {
       ...parsed,
       unlockedLevel: Math.min(10, Math.max(1, parsed.unlockedLevel!)),
       coins: Math.max(0, parsed.coins!),
+      ingredients: Array.from(
+        new Set([...base.ingredients, ...parsed.ingredients!]),
+      ),
       stars: parsed.stars ?? {},
       upgrades: { ...base.upgrades, ...parsed.upgrades },
       endless: { ...base.endless, ...parsed.endless },
@@ -154,9 +157,13 @@ export function importSave(text: string): Save {
     )
   )
     throw new Error("存档内容不合法");
+  const base = defaultSave();
   return {
-    ...defaultSave(),
+    ...base,
     ...parsed,
+    ingredients: Array.from(
+      new Set([...base.ingredients, ...parsed.ingredients]),
+    ),
     activeRun: normalizeRun(parsed.activeRun),
   };
 }

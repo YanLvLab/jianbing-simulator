@@ -4,21 +4,21 @@ import IngredientArt from "./IngredientArt";
 type Props = {
   kind: "sauce" | "fill";
   ids: Ingredient[];
+  available: Ingredient[];
   onChoose: (id: Ingredient) => void;
   active: Ingredient | null;
   load: number;
   actual: Partial<Record<Ingredient, number>>;
-  wants?: Partial<Record<Ingredient, number>>;
 };
 
 export default function CounterStation({
   kind,
   ids,
+  available,
   onChoose,
   active,
   load,
   actual,
-  wants,
 }: Props) {
   return (
     <div
@@ -27,19 +27,25 @@ export default function CounterStation({
     >
       <div className="station-title">
         <strong>{kind === "sauce" ? "蘸酱" : "抓料"}</strong>
-        <span>{kind === "sauce" ? "点搪瓷缸蘸刷" : "点簸箕抓一把"}</span>
+        <span>
+          {kind === "sauce"
+            ? "看小票选酱 · 点缸蘸刷"
+            : "看小票挑料 · 点簸箕抓一把"}
+        </span>
       </div>
       <div className="station-vessels">
         {ids.map((id) => {
           const item = INGREDIENTS.find((i) => i.id === id)!;
           const selected = active === id;
+          const locked = !available.includes(id);
           return (
             <button
               key={id}
               type="button"
-              className={`station-vessel ${selected ? "active" : ""}`}
+              className={`station-vessel ${selected ? "active" : ""} ${locked ? "locked" : ""}`}
               onClick={() => onChoose(id)}
-              aria-label={item.name}
+              disabled={locked}
+              aria-label={locked ? `${item.name}，未解锁` : item.name}
             >
               <svg
                 className="vessel-art"
@@ -146,8 +152,7 @@ export default function CounterStation({
               )}
               <span className="vessel-name">{item.name}</span>
               <span className="vessel-count">
-                {actual[id] ?? 0}
-                {wants && ` / ${wants[id] ?? 0}`}
+                {locked ? "未解锁" : `已加 ${actual[id] ?? 0}`}
               </span>
             </button>
           );

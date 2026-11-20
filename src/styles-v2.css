@@ -312,14 +312,14 @@
 }
 .result-card {
   position: relative;
-  overflow: hidden;
+  overflow: auto;
 }
 .result-customer {
   position: absolute;
-  right: 4px;
-  bottom: 70px;
-  width: 95px;
-  height: 180px;
+  right: 8px;
+  top: 10px;
+  width: 80px;
+  height: 150px;
   opacity: 0.9;
   pointer-events: none;
 }
@@ -327,8 +327,8 @@
   position: relative;
   left: 0;
   bottom: 0;
-  width: 90px;
-  height: 180px;
+  width: 80px;
+  height: 150px;
   filter: none;
 }
 .result-customer.delighted {
@@ -668,6 +668,16 @@
   border-radius: 20px;
   box-shadow: 0 20px 70px #0c1a1377;
   background: #fcfaf2;
+}
+.result-details .ingredient-mismatch {
+  grid-column: 1 / -1;
+  border: 1px solid #d28773;
+  border-left: 4px solid #c94c35;
+  background: #fce9dd;
+  color: #833723;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: left;
 }
 .result-score {
   color: #d24b34;
@@ -1284,23 +1294,6 @@
 .mobile-order-ribbon {
   display: none;
 }
-.game-page .tool-grid button.tool-needed {
-  outline: 2px solid #f0c36b;
-  outline-offset: -3px;
-}
-.game-page .tool-grid button.tool-complete {
-  background: #dce9cf;
-}
-.game-page .tool-grid button.tool-complete b {
-  color: #246342;
-}
-.game-page .tool-grid button.tool-avoid {
-  opacity: 0.65;
-}
-.game-page .tool-grid button.tool-error {
-  outline: 2px solid #c84636;
-  outline-offset: -3px;
-}
 .game-page .tool-grid button.tool-active {
   box-shadow: inset 0 -5px 0 #d5853d;
 }
@@ -1364,6 +1357,16 @@
 .game-page .station-vessel.active {
   background: #f4cb8a2b;
   border-color: #e7be75;
+}
+.game-page .station-vessel.locked {
+  opacity: 0.55;
+  filter: saturate(0.55);
+  cursor: not-allowed;
+}
+.game-page .station-vessel.locked:hover {
+  transform: none;
+  background: transparent;
+  border-color: transparent;
 }
 .game-page .vessel-art {
   filter: drop-shadow(1px 4px 2px #081b14aa);

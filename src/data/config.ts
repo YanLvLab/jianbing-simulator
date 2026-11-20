@@ -96,7 +96,7 @@ export const INGREDIENTS: {
     icon: "❋",
     color: "#4c9b63",
     category: "配料",
-    unlockLevel: 2,
+    unlockLevel: 1,
     cost: 0,
   },
   {
@@ -114,7 +114,7 @@ export const INGREDIENTS: {
     icon: "✦",
     color: "#d84e35",
     category: "酱料",
-    unlockLevel: 3,
+    unlockLevel: 1,
     cost: 0,
   },
   {
@@ -132,7 +132,7 @@ export const INGREDIENTS: {
     icon: "▰",
     color: "#d67868",
     category: "配料",
-    unlockLevel: 4,
+    unlockLevel: 1,
     cost: 0,
   },
   {
@@ -150,8 +150,8 @@ export const INGREDIENTS: {
     icon: "⁂",
     color: "#e7d4a5",
     category: "配料",
-    unlockLevel: 7,
-    cost: 120,
+    unlockLevel: 1,
+    cost: 0,
   },
 ];
 export const CUSTOMERS: Customer[] = [
@@ -220,7 +220,7 @@ export const LEVELS: Level[] = [
     customers: 2,
     target: 18,
     patience: 90,
-    special: "学会制作基本款",
+    special: "五选二，看清小票",
     star2: 30,
     star3: 38,
   },
@@ -232,7 +232,7 @@ export const LEVELS: Level[] = [
     customers: 3,
     target: 38,
     patience: 84,
-    special: "香菜登场",
+    special: "香菜偏好",
     star2: 47,
     star3: 56,
   },
@@ -256,7 +256,7 @@ export const LEVELS: Level[] = [
     customers: 5,
     target: 78,
     patience: 72,
-    special: "火腿肠开放",
+    special: "三样配料加单",
     star2: 95,
     star3: 115,
   },
@@ -340,7 +340,23 @@ export function unlockedByLevel(level: number): Ingredient[] {
   );
 }
 
-export function makeOrder(level: number, sequence: number, mode: Mode): Order {
+function drawIngredients<T>(options: T[], count: number): T[] {
+  const remaining = [...options];
+  const picked: T[] = [];
+  while (picked.length < count && remaining.length) {
+    picked.push(
+      remaining.splice(Math.floor(Math.random() * remaining.length), 1)[0],
+    );
+  }
+  return picked;
+}
+
+export function makeOrder(
+  level: number,
+  sequence: number,
+  mode: Mode,
+  available: Ingredient[] = unlockedByLevel(level),
+): Order {
   const pool =
     level < 2
       ? CUSTOMERS.slice(0, 2)
@@ -348,23 +364,43 @@ export function makeOrder(level: number, sequence: number, mode: Mode): Order {
         ? CUSTOMERS.slice(0, 4)
         : CUSTOMERS;
   const customer = pool[Math.floor(Math.random() * pool.length)];
-  const wants: Partial<Record<Ingredient, number>> = {
-    egg: 1,
-    sweet: 1,
-    crispy: 1,
-    scallion: 1,
-  };
+  const saucePool = (["sweet", "chili", "garlic"] as Ingredient[]).filter(
+    (id) => available.includes(id),
+  );
+  const fillingPool = (
+    ["scallion", "cilantro", "crispy", "ham", "sesame"] as Ingredient[]
+  ).filter(
+    (id) =>
+      available.includes(id) &&
+      !(customer.kind === "cilantroHater" && id === "cilantro"),
+  );
+  const sauce = drawIngredients<Ingredient>(
+    saucePool.length ? saucePool : ["sweet"],
+    1,
+  )[0];
+  const fillingCount = level >= 4 ? 3 : 2;
+  const extraScallion = level >= 3 && Math.random() < 0.2;
+  const extraCrispy = level >= 8 && Math.random() < 0.35;
+  const forced = (
+    [
+      customer.kind === "cilantroFan" ? "cilantro" : null,
+      extraScallion ? "scallion" : null,
+      extraCrispy ? "crispy" : null,
+    ] as (Ingredient | null)[]
+  ).filter((id): id is Ingredient => !!id);
+  const selected = [
+    ...new Set(forced),
+    ...drawIngredients(
+      fillingPool.filter((id) => !forced.includes(id)),
+      Math.max(0, fillingCount - new Set(forced).size),
+    ),
+  ];
+  const wants: Partial<Record<Ingredient, number>> = { egg: 1, [sauce]: 1 };
+  for (const id of selected) wants[id] = 1;
   const notes: string[] = [];
-  if (level >= 2 && Math.random() < 0.48) wants.cilantro = 1;
-  if (level >= 3 && Math.random() < 0.4) wants.chili = 1;
-  if (level >= 4 && Math.random() < 0.42) wants.ham = 1;
   if (level >= 5 && Math.random() < 0.25) {
     wants.egg = 2;
     notes.push("加两个鸡蛋");
-  }
-  if (level >= 8 && Math.random() < 0.35) {
-    wants.crispy = 2;
-    notes.push("多加薄脆");
   }
   if (customer.kind === "cilantroFan") {
     wants.cilantro = 2;
@@ -375,16 +411,25 @@ export function makeOrder(level: number, sequence: number, mode: Mode): Order {
     notes.push("不要香菜");
   }
   if (customer.kind === "chiliFan") {
+    if (sauce !== "chili") delete wants[sauce];
     wants.chili = 2;
     notes.push("辣椒加倍");
   }
   if (level >= 3 && customer.kind !== "chiliFan" && Math.random() < 0.18) {
+    if (sauce === "chili") {
+      delete wants.chili;
+      wants.sweet = 1;
+    }
     wants.chili = 0;
     notes.push("不要辣椒");
   }
-  if (level >= 3 && Math.random() < 0.2) {
+  if (extraScallion) {
     wants.scallion = 2;
     notes.push("多加葱花");
+  }
+  if (extraCrispy) {
+    wants.crispy = 2;
+    notes.push("多加薄脆");
   }
   const price =
     14 +

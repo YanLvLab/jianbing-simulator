@@ -1,4 +1,11 @@
-import { Ingredient, LEVELS, Mode, Order, Stage } from "../data/config";
+import {
+  Ingredient,
+  INGREDIENTS,
+  LEVELS,
+  Mode,
+  Order,
+  Stage,
+} from "../data/config";
 
 export type Point = { x: number; y: number; strength?: number; at?: number };
 export type Pancake = {
@@ -130,21 +137,18 @@ export function evaluate(
     ...p.sauces,
     egg: p.eggs,
   };
+  const mismatches: string[] = [];
   if (order)
-    for (const ingredient of [
-      "egg",
-      "scallion",
-      "cilantro",
-      "sweet",
-      "chili",
-      "crispy",
-      "ham",
-    ] as Ingredient[]) {
+    for (const { id: ingredient, name } of INGREDIENTS) {
       const expected = wants[ingredient] ?? 0;
       const got = actual[ingredient] ?? 0;
+      if (got === expected) continue;
       accuracy -=
         Math.min(2, Math.abs(got - expected)) *
-        (ingredient === "cilantro" && expected === 0 ? 22 : 11);
+        (ingredient === "cilantro" && expected === 0 ? 30 : 18);
+      mismatches.push(
+        `${got < expected ? "少放" : "多放"}${name}（要 ${expected}，放 ${got}）`,
+      );
     }
   if (mode === "free") {
     const sauceCount =
@@ -161,6 +165,7 @@ export function evaluate(
     if (p.eggs > 3) accuracy -= (p.eggs - 3) * 6;
   }
   accuracy = Math.max(0, accuracy);
+  const wrong = mismatches.length > 0;
   const speed =
     mode === "free" || !order
       ? 100
@@ -176,22 +181,24 @@ export function evaluate(
   const satisfaction = Math.max(
     0,
     Math.min(
-      100,
+      wrong ? 68 : 100,
       Math.round(
         score * (order?.customer.quality ?? 1) -
-          (order?.customer.kind === "worker" ? (100 - speed) * 0.12 : 0),
+          (order?.customer.kind === "worker" ? (100 - speed) * 0.12 : 0) -
+          (wrong ? 12 : 0),
       ),
     ),
   );
   const perfect = score >= 88 && accuracy === 100;
-  const wrong = accuracy < 70;
   const revenue =
     mode === "free"
       ? 0
       : Math.max(
           0,
           Math.round(
-            (order?.price ?? 0) * (wrong ? 0.4 : 1) + (perfect ? 5 : 0),
+            (order?.price ?? 0) *
+              (wrong ? Math.max(0.3, 0.75 - mismatches.length * 0.2) : 1) +
+              (perfect ? 5 : 0),
           ),
         );
   const feedback =
@@ -224,6 +231,7 @@ export function evaluate(
       `配料 ${accuracy}`,
       `折叠 ${foldQuality}`,
       `速度 ${speed}`,
+      ...mismatches,
     ],
   };
 }

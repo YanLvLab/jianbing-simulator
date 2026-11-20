@@ -94,16 +94,10 @@ function ticketText(wants: Partial<Record<Ingredient, number>>) {
     .join(" · ");
 }
 
-function pancakeOrderClass(expected?: number, actual?: number) {
-  if (expected === undefined) return "";
-  if (expected === 0) return actual ? "tool-error" : "tool-avoid";
-  if ((actual ?? 0) >= expected) return "tool-complete";
-  return "tool-needed";
-}
-
 function startRun(mode: Mode, level: number, save: Save): Run {
   const config = LEVELS[level - 1];
-  const first = mode === "free" ? null : makeOrder(level, 1, mode);
+  const first =
+    mode === "free" ? null : makeOrder(level, 1, mode, save.ingredients);
   const boosted = first
     ? { ...first, patience: first.patience + save.upgrades.service * 8 }
     : null;
@@ -240,6 +234,7 @@ export default function App() {
                   : current.level,
                 sequence,
                 current.mode,
+                save.ingredients,
               );
           return {
             ...current,
@@ -269,7 +264,7 @@ export default function App() {
       });
     }, 100);
     return () => clearInterval(timer);
-  }, [save.upgrades.service]);
+  }, [save.upgrades.service, save.ingredients]);
 
   useEffect(() => {
     if (!run?.finished || completed.current) return;
@@ -474,6 +469,10 @@ export default function App() {
   };
   const addIngredient = (id: Ingredient) => {
     if (!run) return;
+    if (run.mode !== "free" && !save.ingredients.includes(id)) {
+      setNotice("这味食材还没解锁。");
+      return;
+    }
     const p = run.pancake;
     if (p.stage === "egg" && id === "egg") {
       if (p.eggs >= 5) return;
@@ -572,6 +571,7 @@ export default function App() {
               : run.level,
             sequence,
             run.mode,
+            save.ingredients,
           );
     const nextRun: Run = {
       ...run,
@@ -1230,27 +1230,23 @@ export default function App() {
             {run.pancake.stage === "sauce" && (
               <CounterStation
                 kind="sauce"
-                ids={SAUCES.filter(
-                  (id) => save.ingredients.includes(id) || run.mode === "free",
-                )}
+                ids={SAUCES}
+                available={run.mode === "free" ? SAUCES : save.ingredients}
                 onChoose={addIngredient}
                 active={run.pancake.activeSauce}
                 load={run.pancake.brushLoad}
                 actual={run.pancake.sauces}
-                wants={run.order?.wants}
               />
             )}
             {run.pancake.stage === "fill" && (
               <CounterStation
                 kind="fill"
-                ids={FILLINGS.filter(
-                  (id) => save.ingredients.includes(id) || run.mode === "free",
-                )}
+                ids={FILLINGS}
+                available={run.mode === "free" ? FILLINGS : save.ingredients}
                 onChoose={addIngredient}
                 active={run.pancake.activeFilling}
                 load={run.pancake.fillLoad}
                 actual={run.pancake.fillings}
-                wants={run.order?.wants}
               />
             )}
             <aside className="tools-panel">
@@ -1318,26 +1314,31 @@ export default function App() {
               )}
               {run.pancake.stage === "sauce" && (
                 <>
-                  <p>点击右侧搪瓷缸蘸酱，再在饼面拖动。刷子变淡后重新蘸取。</p>
+                  <p>
+                    看小票选酱。点击搪瓷缸蘸刷，再沿饼面拖动；变淡后可重蘸。
+                  </p>
                   <div className="tool-grid station-fallback">
-                    {SAUCES.filter(
-                      (id) =>
-                        save.ingredients.includes(id) || run.mode === "free",
-                    ).map((id) => {
+                    {SAUCES.map((id) => {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
+                      const locked =
+                        run.mode !== "free" && !save.ingredients.includes(id);
                       return (
                         <button
                           key={id}
-                          className={`${pancakeOrderClass(run.order?.wants[id], run.pancake.sauces[id])} ${run.pancake.activeSauce === id ? "tool-active" : ""}`}
+                          className={
+                            run.pancake.activeSauce === id ? "tool-active" : ""
+                          }
                           onClick={() => addIngredient(id)}
+                          disabled={locked}
                         >
                           <i>
                             <IngredientArt id={id} />
                           </i>
                           <span>{item.name}</span>
                           <b>
-                            {run.pancake.sauces[id] ?? 0}
-                            {run.order && `/${run.order.wants[id] ?? 0}`}
+                            {locked
+                              ? "未解锁"
+                              : `已刷 ${run.pancake.sauces[id] ?? 0}`}
                           </b>
                         </button>
                       );
@@ -1347,20 +1348,18 @@ export default function App() {
               )}
               {run.pancake.stage === "fill" && (
                 <>
-                  <p>从右侧簸箕抓料，在饼上拖动撒开。多加要求请再抓一把。</p>
+                  <p>
+                    五种配料都在台上。看小票挑要的，从簸箕抓料，在饼上拖动撒开。
+                  </p>
                   <div className="tool-grid station-fallback">
-                    {FILLINGS.filter(
-                      (id) =>
-                        save.ingredients.includes(id) || run.mode === "free",
-                    ).map((id) => {
+                    {FILLINGS.map((id) => {
                       const item = INGREDIENTS.find((i) => i.id === id)!;
+                      const locked =
+                        run.mode !== "free" && !save.ingredients.includes(id);
                       return (
                         <button
                           key={id}
-                          className={pancakeOrderClass(
-                            run.order?.wants[id],
-                            run.pancake.fillings[id],
-                          )}
+                          disabled={locked}
                           onClick={() => addIngredient(id)}
                         >
                           <i>
@@ -1368,8 +1367,9 @@ export default function App() {
                           </i>
                           <span>{item.name}</span>
                           <b>
-                            {run.pancake.fillings[id] ?? 0}
-                            {run.order && `/${run.order.wants[id] ?? 0}`}
+                            {locked
+                              ? "未解锁"
+                              : `已加 ${run.pancake.fillings[id] ?? 0}`}
                           </b>
                         </button>
                       );
@@ -1499,7 +1499,16 @@ export default function App() {
                 <h2>{toast.feedback}</h2>
                 <div className="result-details">
                   {toast.details.map((detail) => (
-                    <span key={detail}>{detail}</span>
+                    <span
+                      key={detail}
+                      className={
+                        detail.startsWith("少放") || detail.startsWith("多放")
+                          ? "ingredient-mismatch"
+                          : ""
+                      }
+                    >
+                      {detail}
+                    </span>
                   ))}
                 </div>
                 {run.mode !== "free" && (

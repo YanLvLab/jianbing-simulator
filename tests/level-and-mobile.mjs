@@ -23,7 +23,8 @@ const draw = async () => {
   }
   await page.mouse.up();
 };
-const make = async () => {
+const make = async (addExtra = false) => {
+  const ticket = await page.locator(".ticket p").innerText();
   await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
   await draw();
   await click(/下一步：打蛋/);
@@ -41,9 +42,16 @@ const make = async () => {
     { timeout: 12000 },
   );
   await click(/现在翻面/);
+  const sauceNames = ["甜面酱", "辣椒酱", "蒜蓉酱"];
+  if (
+    (await page.locator(".counter-station.sauce .station-vessel").count()) !== 3
+  )
+    throw new Error("Sauces are not all displayed");
+  const sauceName = sauceNames.find((name) => ticket.includes(name));
+  if (!sauceName) throw new Error(`No sauce on ticket: ${ticket}`);
   await page
     .locator(".counter-station.sauce")
-    .getByRole("button", { name: "甜面酱" })
+    .getByRole("button", { name: sauceName })
     .click();
   const sauceBox = await page.locator("canvas").boundingBox();
   if (!sauceBox) throw new Error("No griddle for sauce");
@@ -59,7 +67,19 @@ const make = async () => {
   );
   await page.mouse.up();
   await click(/下一步：加料/);
-  for (const name of ["葱花", "薄脆"]) {
+  await page.screenshot({ path: "tests/v6-five-choice.png" });
+  if (
+    (await page.locator(".counter-station.fill .station-vessel").count()) !== 5
+  )
+    throw new Error("Five fillings are not displayed");
+  if ((await page.locator(".counter-station.fill").innerText()).includes(" / "))
+    throw new Error("Ingredient station leaks target counts");
+  const fillingNames = ["葱花", "香菜", "薄脆", "火腿肠", "芝麻"].filter(
+    (name) => ticket.includes(name),
+  );
+  if (fillingNames.length !== 2)
+    throw new Error(`Level 1 did not request two of five: ${ticket}`);
+  for (const name of fillingNames) {
     await page
       .locator(".counter-station.fill")
       .getByRole("button", { name })
@@ -73,6 +93,26 @@ const make = async () => {
       sauceBox.x + sauceBox.width * 0.65,
       sauceBox.y + sauceBox.height * 0.6,
       { steps: 14 },
+    );
+    await page.mouse.up();
+  }
+  if (addExtra) {
+    const extraName = ["葱花", "香菜", "薄脆", "火腿肠", "芝麻"].find(
+      (name) => !fillingNames.includes(name),
+    );
+    await page
+      .locator(".counter-station.fill")
+      .getByRole("button", { name: extraName })
+      .click();
+    await page.mouse.move(
+      sauceBox.x + sauceBox.width * 0.38,
+      sauceBox.y + sauceBox.height * 0.48,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      sauceBox.x + sauceBox.width * 0.62,
+      sauceBox.y + sauceBox.height * 0.5,
+      { steps: 12 },
     );
     await page.mouse.up();
   }
@@ -101,7 +141,14 @@ try {
   await page.waitForTimeout(930);
   await page.screenshot({ path: "tests/v2-level-handoff.png" });
   await click(/接待下一位/);
-  await make();
+  await make(true);
+  const wrongResult = await page.locator(".result-card").innerText();
+  if (!wrongResult.includes("多放"))
+    throw new Error("Wrong topping did not appear in the result");
+  const satisfaction = Number(wrongResult.match(/满意度\s*(\d+)%/)?.[1]);
+  if (!Number.isFinite(satisfaction) || satisfaction > 68)
+    throw new Error("Wrong topping still gave high satisfaction");
+  await page.screenshot({ path: "tests/v6-wrong-order.png" });
   await click(/查看今日结算/);
   const summary = await page.locator(".summary-card").innerText();
   if (!summary.includes("营业额") || !summary.includes("★"))
