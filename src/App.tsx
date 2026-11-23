@@ -335,6 +335,7 @@ export default function App() {
         const previous = p.saucePaint[p.activeSauce] ?? [];
         if (
           previous.length &&
+          !point.strokeStart &&
           Math.hypot(
             point.x - previous.at(-1)!.x,
             point.y - previous.at(-1)!.y,

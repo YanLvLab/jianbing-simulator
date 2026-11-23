@@ -107,6 +107,88 @@ function drawTrace(
   }
 }
 
+const sauceStrokeCache = new WeakMap<Point[], HTMLCanvasElement>();
+function drawBrushTrace(points: Point[], color: string) {
+  let layer = sauceStrokeCache.get(points);
+  if (layer) return layer;
+  layer = document.createElement("canvas");
+  layer.width = layer.height = size;
+  const brush = layer.getContext("2d")!;
+  pancakeOutline(brush, radius - 8);
+  brush.clip();
+  brush.strokeStyle = color;
+  brush.fillStyle = color;
+  brush.lineCap = "butt";
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    const previous = points[i - 1];
+    const start =
+      !previous ||
+      point.strokeStart ||
+      Math.hypot(point.x - previous.x, point.y - previous.y) > 0.15;
+    if (start) {
+      const next = points[i + 1];
+      const angle =
+        next && !next.strokeStart
+          ? Math.atan2(next.y - point.y, next.x - point.x)
+          : -0.2;
+      brush.save();
+      brush.translate(point.x * size, point.y * size);
+      brush.rotate(angle);
+      brush.lineCap = "round";
+      brush.globalAlpha = 0.3 * (point.strength ?? 1);
+      for (let hair = -4; hair <= 4; hair++) {
+        if (rnd(i * 41 + hair * 17 + 7) < 0.2) continue;
+        brush.lineWidth = 1 + rnd(i * 19 + hair * 11 + 2) * 1.4;
+        brush.beginPath();
+        brush.moveTo(-3, hair * 3.8);
+        brush.lineTo(2 + rnd(i * 13 + hair * 3 + 5) * 4, hair * 3.8);
+        brush.stroke();
+      }
+      brush.restore();
+      continue;
+    }
+    const x0 = previous.x * size,
+      y0 = previous.y * size,
+      x1 = point.x * size,
+      y1 = point.y * size;
+    const distance = Math.hypot(x1 - x0, y1 - y0);
+    if (distance < 0.1) continue;
+    const normalX = -(y1 - y0) / distance,
+      normalY = (x1 - x0) / distance;
+    const load = ((previous.strength ?? 1) + (point.strength ?? 1)) / 2;
+    brush.globalAlpha = 0.1 * load;
+    brush.lineWidth = 30;
+    brush.beginPath();
+    brush.moveTo(x0, y0);
+    brush.lineTo(x1, y1);
+    brush.stroke();
+    for (let hair = -4; hair <= 4; hair++) {
+      const grain = rnd(i * 37 + hair * 23 + 11);
+      if (grain < 0.08 + (1 - load) * 0.4) continue;
+      const offset = hair * 3.8;
+      const flutterBefore = Math.sin(i * 0.29 + hair * 1.13) * 0.8;
+      const flutterAfter = Math.sin((i + 1) * 0.29 + hair * 1.13) * 0.8;
+      brush.globalAlpha =
+        load * (0.34 + grain * 0.4) * (1 - Math.abs(hair) * 0.065);
+      brush.lineWidth = 1.6 + rnd(i * 19 + hair * 7 + 2) * 1.5;
+      brush.beginPath();
+      brush.moveTo(
+        x0 + normalX * (offset + flutterBefore),
+        y0 + normalY * (offset + flutterBefore),
+      );
+      brush.lineTo(
+        x1 + normalX * (offset + flutterAfter),
+        y1 + normalY * (offset + flutterAfter),
+      );
+      brush.stroke();
+    }
+  }
+  brush.globalAlpha = 1;
+  sauceStrokeCache.set(points, layer);
+  return layer;
+}
+
 function ingredient(
   ctx: CanvasRenderingContext2D,
   id: string,
@@ -718,25 +800,7 @@ function drawFood(
     ctx.arc(center, center, radius - 8, 0, 7);
     ctx.clip();
     if (trace.length) {
-      if (trace.length === 1) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.ellipse(trace[0].x * size, trace[0].y * size, 7, 5, -0.3, 0, 7);
-        ctx.fill();
-      }
-      trace.forEach((p, i) => {
-        if (!i) return;
-        if (Math.hypot(p.x - trace[i - 1].x, p.y - trace[i - 1].y) > 0.15)
-          return;
-        ctx.globalAlpha = Math.max(0.15, p.strength ?? 1);
-        ctx.lineWidth =
-          (id === "garlic" ? 15 : 21) * Math.max(0.28, p.strength ?? 1);
-        ctx.beginPath();
-        ctx.moveTo(trace[i - 1].x * size, trace[i - 1].y * size);
-        ctx.lineTo(p.x * size, p.y * size);
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
+      ctx.drawImage(drawBrushTrace(trace, color), 0, 0);
       ctx.restore();
       continue;
     }
@@ -927,10 +991,12 @@ function drawTool(
   y: number,
   tool: "scraper" | "spatula" | "brush" | "pinch" | "knife",
   sauceColor = "#75472e",
+  angle = -0.5,
+  load = 1,
 ) {
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(tool === "knife" ? -0.85 : -0.5);
+  ctx.rotate(tool === "knife" ? -0.85 : angle);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   if (tool === "pinch") {
@@ -970,24 +1036,28 @@ function drawTool(
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#c5b58f";
-    ctx.fillRect(-6, -12, 13, 11);
+    ctx.fillRect(-11, -13, 22, 12);
+    ctx.strokeStyle = "#655849";
+    ctx.strokeRect(-11, -13, 22, 12);
+    ctx.globalAlpha = 0.3 + load * 0.7;
     ctx.fillStyle = sauceColor;
     ctx.beginPath();
-    ctx.moveTo(-10, -2);
-    ctx.quadraticCurveTo(0, 5, 10, -2);
-    ctx.lineTo(7, 16);
-    ctx.quadraticCurveTo(0, 22, -7, 16);
+    ctx.moveTo(-17, -2);
+    ctx.quadraticCurveTo(0, 2, 17, -2);
+    ctx.lineTo(15, 13);
+    ctx.quadraticCurveTo(0, 18, -15, 13);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.strokeStyle = "#efd9b0a8";
-    ctx.lineWidth = 1;
-    for (let i = -5; i <= 5; i += 3) {
+    ctx.strokeStyle = "#f4dfbd";
+    ctx.lineWidth = 1.1;
+    for (let i = -14; i <= 14; i += 3.5) {
       ctx.beginPath();
-      ctx.moveTo(i, 2);
-      ctx.lineTo(i * 0.7, 15);
+      ctx.moveTo(i, 1);
+      ctx.lineTo(i * 0.94, 13 + rnd(i + 20) * 3);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
   } else {
     ctx.fillStyle = "#a56a3e";
     ctx.strokeStyle = "#543a2b";
@@ -1040,6 +1110,7 @@ export default function Griddle({
     dragging = useRef(false),
     bagAction = useRef<"cut" | "bag" | null>(null),
     cursor = useRef<Point | null>(null),
+    brushAngle = useRef(-0.5),
     repaint = useRef<(() => void) | null>(null),
     previous = useRef<Pancake | null>(null),
     motion = useRef<Motion | null>(null);
@@ -1070,11 +1141,18 @@ export default function Griddle({
       (pancake.stage === "fill" && pancake.fillLoad > 0)
     ) {
       dragging.current = true;
-      onPaint(p);
+      onPaint(pancake.stage === "sauce" ? { ...p, strokeStart: true } : p);
     }
   };
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    cursor.current = point(e);
+    const next = point(e);
+    if (pancake.stage === "sauce" && dragging.current && cursor.current) {
+      const dx = next.x - cursor.current.x,
+        dy = next.y - cursor.current.y;
+      if (Math.hypot(dx, dy) > 0.002)
+        brushAngle.current = Math.atan2(dy, dx) - Math.PI / 2;
+    }
+    cursor.current = next;
     if (dragging.current) onPaint(cursor.current);
     else repaint.current?.();
   };
@@ -1161,7 +1239,11 @@ export default function Griddle({
             ? "#b73529"
             : pancake.activeSauce === "garlic"
               ? "#e1cc91"
-              : "#703f2c",
+              : pancake.activeSauce === "sweet"
+                ? "#703f2c"
+                : "#b9a786",
+          pancake.stage === "sauce" ? brushAngle.current : -0.5,
+          pancake.stage === "sauce" ? pancake.brushLoad : 1,
         );
       if (progress < 1 && !reduced) frame = requestAnimationFrame(render);
     };

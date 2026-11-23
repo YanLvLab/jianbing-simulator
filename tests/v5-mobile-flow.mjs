@@ -52,6 +52,7 @@ try {
     .getByRole("button", { name: "甜面酱" })
     .tap();
   await stroke([0.3, 0.48], [0.68, 0.53]);
+  await page.screenshot({ path: "tests/v7-mobile-brush.png" });
   await page.getByRole("button", { name: /下一步：加料/ }).tap();
   await page
     .locator(".counter-station.fill")

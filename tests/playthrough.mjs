@@ -108,9 +108,34 @@ try {
     .click();
   await page.mouse.move(pt(0.35, 0.48).x, pt(0.35, 0.48).y);
   await page.mouse.down();
-  await page.mouse.move(pt(0.65, 0.52).x, pt(0.65, 0.52).y, { steps: 15 });
+  for (let i = 1; i <= 28; i++) {
+    await page.mouse.move(
+      pt(0.35 + (0.3 * i) / 28, 0.48 + (0.04 * i) / 28).x,
+      pt(0.35 + (0.3 * i) / 28, 0.48 + (0.04 * i) / 28).y,
+    );
+    if (i === 14) await page.screenshot({ path: "tests/v7-brush-during.png" });
+  }
   await page.mouse.up();
   await page.screenshot({ path: "tests/v2-anim-sauce.png" });
+  const remaining = await page
+    .locator(".station-load em")
+    .evaluate((element) => Number.parseFloat(element.style.width));
+  if (remaining >= 40) throw new Error(`Brush did not fade: ${remaining}%`);
+  await page
+    .locator(".counter-station.sauce")
+    .getByRole("button", { name: "甜面酱" })
+    .click();
+  await page.mouse.move(pt(0.64, 0.57).x, pt(0.64, 0.57).y);
+  await page.mouse.down();
+  await page.mouse.move(pt(0.37, 0.59).x, pt(0.37, 0.59).y, { steps: 16 });
+  await page.mouse.up();
+  await page.screenshot({ path: "tests/v7-brush-second-pass.png" });
+  if (
+    !(await page.locator(".counter-station.sauce").innerText()).includes(
+      "已加 2",
+    )
+  )
+    throw new Error("Redipping did not create a second sauce application");
   await page.getByRole("button", { name: /下一步：加料/ }).click();
   await page
     .locator(".counter-station.fill")

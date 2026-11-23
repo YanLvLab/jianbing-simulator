@@ -7,7 +7,13 @@ import {
   Stage,
 } from "../data/config";
 
-export type Point = { x: number; y: number; strength?: number; at?: number };
+export type Point = {
+  x: number;
+  y: number;
+  strength?: number;
+  at?: number;
+  strokeStart?: boolean;
+};
 export type Pancake = {
   stage: Stage;
   batterType: "classic" | "grain" | "purple";
