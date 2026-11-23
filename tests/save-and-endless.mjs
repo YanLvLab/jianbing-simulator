@@ -53,15 +53,30 @@ try {
   console.log(
     "PASS: export, import, spend, upgrade, ingredient and decoration persisted",
   );
-  await page.getByRole("button", { name: /游戏设置/ }).click();
-  await page.getByRole("button", { name: "重置存档" }).click();
-  await page.getByRole("button", { name: /确认重置/ }).click();
-  await page.getByRole("button", { name: /第二次确认/ }).click();
+  await page.getByRole("button", { name: /重置进度/ }).click();
+  await page.getByRole("alert").getByText(/从第 1 关重新开始/).waitFor();
+  await page.getByRole("button", { name: "取消" }).click();
+  if (!(await page.locator(".coin-display").innerText()).includes("70"))
+    throw new Error("Cancel reset changed progress");
+  await page.getByRole("button", { name: "重置游戏进度" }).click();
+  await page.getByRole("button", { name: "确认清空进度" }).click();
+  const reset = await page.evaluate(
+    (k) => JSON.parse(localStorage.getItem(k)),
+    key,
+  );
   if (
-    (await page.evaluate((k) => JSON.parse(localStorage.getItem(k)), key))
-      .coins !== 0
+    reset.coins !== 0 ||
+    reset.unlockedLevel !== 1 ||
+    reset.upgrades.griddle !== 0 ||
+    reset.activeRun !== null ||
+    reset.sound !== false ||
+    reset.reducedMotion !== true
   )
-    throw new Error("Reset failed");
+    throw new Error("Reset did not clear progress or preserve settings");
+  await page.reload();
+  await page.getByText(/已解锁第 1 关/).waitFor();
+  if (!(await page.locator(".coin-display").innerText()).includes("0"))
+    throw new Error("Reset progress did not survive reload");
   await page.evaluate((k) => localStorage.setItem(k, "{broken"), key);
   await page.reload();
   if (!(await page.locator(".coin-display").innerText()).includes("0"))

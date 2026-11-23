@@ -34,7 +34,6 @@ import {
   loadSave,
   persistSave,
   Save,
-  SAVE_KEY,
 } from "./systems/save";
 import { playSound, startMusic, Sound } from "./systems/sound";
 import { getStepGate } from "./game/workflow";
@@ -148,7 +147,6 @@ export default function App() {
     !!save.activeRun?.pancake.batter.length,
   );
   const [resetFirst, setResetFirst] = useState(false);
-  const [resetSecond, setResetSecond] = useState(false);
   const importInput = useRef<HTMLInputElement>(null);
   const completed = useRef(false);
   const lastTick = useRef(performance.now());
@@ -668,15 +666,25 @@ export default function App() {
       setResetFirst(true);
       return;
     }
-    if (!resetSecond) {
-      setResetSecond(true);
-      return;
-    }
-    localStorage.removeItem(SAVE_KEY);
-    setSave(defaultSave());
+    const fresh = {
+      ...defaultSave(),
+      sound: save.sound,
+      music: save.music,
+      reducedMotion: save.reducedMotion,
+    };
+    runRef.current = null;
+    setRun(null);
+    setToast(null);
+    setBatterPoured(false);
+    setServing(false);
+    setLeavingCustomer(null);
+    setLastServedCustomer(null);
+    completed.current = false;
+    persistSave(fresh);
+    setSave(fresh);
+    setScreen("menu");
     setResetFirst(false);
-    setResetSecond(false);
-    setNotice("存档已重置。");
+    setNotice("游戏进度已重置，从第 1 关重新开始。");
   };
 
   const stepRequirement = run
@@ -786,6 +794,14 @@ export default function App() {
               隐藏成就 ↗
             </button>
             <button onClick={() => setScreen("settings")}>游戏设置 ↗</button>
+            <button
+              onClick={() => {
+                setScreen("settings");
+                setResetFirst(true);
+              }}
+            >
+              重置进度 ↗
+            </button>
           </nav>
         </main>
       )}
@@ -991,24 +1007,31 @@ export default function App() {
                 onChange={(e) => void importFile(e.target.files?.[0])}
               />
             </div>
-            <button className="danger-button" onClick={confirmReset}>
-              {resetSecond
-                ? "第二次确认：永久清空存档"
-                : resetFirst
-                  ? "确认重置？请再点一次"
-                  : "重置存档"}
-            </button>
-            {(resetFirst || resetSecond) && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  setResetFirst(false);
-                  setResetSecond(false);
-                }}
-              >
-                取消重置
-              </button>
-            )}
+            <div className="reset-progress">
+              <h3>重新开摊</h3>
+              <p>
+                将清空关卡、星级、金币、食材、升级、成就、无尽纪录和当前对局。
+                音效、音乐和动态效果设置会保留。需要备份时，请先导出存档。
+              </p>
+              {resetFirst && (
+                <p role="alert" className="reset-warning">
+                  确定从第 1 关重新开始？这一步无法撤销。
+                </p>
+              )}
+              <div className="settings-actions">
+                <button className="danger-button" onClick={confirmReset}>
+                  {resetFirst ? "确认清空进度" : "重置游戏进度"}
+                </button>
+                {resetFirst && (
+                  <button
+                    className="outline-button"
+                    onClick={() => setResetFirst(false)}
+                  >
+                    取消
+                  </button>
+                )}
+              </div>
+            </div>
           </section>
           <section className="settings-panel">
             <h2>怎么做一份饼</h2>
