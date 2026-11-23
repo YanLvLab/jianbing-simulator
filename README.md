@@ -1,4 +1,4 @@
-# 煎饼果子模拟器 · Jianbing Simulator
+# 晨光煎饼铺 · Jianbing at Dawn
 
 一款可以直接在浏览器里玩的中文街头早餐摊游戏。React + TypeScript + Vite；V2 使用手绘场景与人物素材、SVG 工具和随操作轨迹绘制的 Canvas 食物。无需账号、后端、付费接口或外部游戏服务。
 

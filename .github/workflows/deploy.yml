@@ -1,4 +1,4 @@
-name: Deploy Jianbing Simulator
+name: Deploy Jianbing at Dawn
 on:
   push:
     branches: [main, master]

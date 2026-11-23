@@ -176,7 +176,7 @@ export function exportSave(save: Save) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "jianbing-save.json";
+  a.download = "jianbing-at-dawn-save.json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

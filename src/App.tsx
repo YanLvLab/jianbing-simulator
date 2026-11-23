@@ -697,8 +697,8 @@ export default function App() {
         <button className="brand" onClick={backToMenu}>
           <span className="brand-stamp">饼</span>
           <span>
-            <strong>煎饼果子模拟器</strong>
-            <small>JIANBING SIMULATOR · 早市开张</small>
+            <strong>晨光煎饼铺</strong>
+            <small>JIANBING AT DAWN · 早市开张</small>
           </span>
         </button>
         <div className="topbar-right">
@@ -758,7 +758,7 @@ export default function App() {
                 <i />
               </div>
               <div className="signboard">
-                老张煎饼铺 <small>现摊现做 · 香飘一条街</small>
+                晨光煎饼铺 <small>现摊现做 · 香飘一条街</small>
               </div>
               <div className="hero-pan">
                 <div className="hero-pancake">
@@ -1663,7 +1663,7 @@ export default function App() {
       )}
       <footer className="site-footer">
         <span>天亮了，铁板热了，故事开始了。</span>
-        <span>© 老张煎饼铺 · 本地单机游戏</span>
+        <span>© 晨光煎饼铺 · 本地单机游戏</span>
       </footer>
     </div>
   );
