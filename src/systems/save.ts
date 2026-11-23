@@ -78,6 +78,8 @@ function normalizeRun(value: unknown): Run | null {
         ? run.maxCustomers
         : Infinity,
     bestPerfectStreak: run.bestPerfectStreak ?? 0,
+    eggCostTotal: Number.isFinite(run.eggCostTotal) ? run.eggCostTotal : 0,
+    profit: Number.isFinite(run.profit) ? run.profit : run.revenue,
     paused: true,
   };
 }
@@ -99,7 +101,7 @@ export function loadSave(): Save {
       ...base,
       ...parsed,
       unlockedLevel: Math.min(10, Math.max(1, parsed.unlockedLevel!)),
-      coins: Math.max(0, parsed.coins!),
+      coins: parsed.coins!,
       ingredients: Array.from(
         new Set([...base.ingredients, ...parsed.ingredients!]),
       ),
@@ -132,7 +134,6 @@ export function importSave(text: string): Save {
     parsed.unlockedLevel < 1 ||
     parsed.unlockedLevel > 10 ||
     !Number.isFinite(parsed.coins) ||
-    parsed.coins < 0 ||
     !Array.isArray(parsed.ingredients) ||
     !parsed.upgrades ||
     !parsed.endless ||

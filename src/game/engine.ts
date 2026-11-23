@@ -1,4 +1,5 @@
 import {
+  EGG_UNIT_COST,
   Ingredient,
   INGREDIENTS,
   LEVELS,
@@ -41,6 +42,8 @@ export type Result = {
   score: number;
   satisfaction: number;
   revenue: number;
+  eggCost: number;
+  profit: number;
   perfect: boolean;
   wrong: boolean;
   feedback: string;
@@ -59,6 +62,8 @@ export type Run = {
   served: number;
   missed: number;
   revenue: number;
+  eggCostTotal: number;
+  profit: number;
   perfect: number;
   wrong: number;
   satisfactionTotal: number;
@@ -196,17 +201,22 @@ export function evaluate(
     ),
   );
   const perfect = score >= 88 && accuracy === 100;
+  const extraEggs = Math.max(0, p.eggs - (order?.wants.egg ?? 0));
+  const eggCost = p.eggs * EGG_UNIT_COST;
   const revenue =
     mode === "free"
       ? 0
-      : Math.max(
-          0,
-          Math.round(
-            (order?.price ?? 0) *
-              (wrong ? Math.max(0.3, 0.75 - mismatches.length * 0.2) : 1) +
-              (perfect ? 5 : 0),
-          ),
-        );
+      : extraEggs > 0
+        ? 0
+        : Math.max(
+            0,
+            Math.round(
+              (order?.price ?? 0) *
+                (wrong ? Math.max(0.3, 0.75 - mismatches.length * 0.2) : 1) +
+                (perfect ? 5 : 0),
+            ),
+          );
+  const profit = mode === "free" ? 0 : revenue - eggCost;
   const feedback =
     mode === "free"
       ? score >= 85
@@ -214,17 +224,21 @@ export function evaluate(
         : score >= 65
           ? "有模有样，再练练手感。"
           : "铁板记住了你的勇气。"
-      : wrong
-        ? "这配料和我说的好像不太一样……"
-        : perfect
-          ? "老板，这口绝了！明天还来。"
-          : satisfaction < 55
-            ? "早高峰要赶不上了……"
-            : "热乎！下回再来一份。";
+      : extraEggs > 0
+        ? "鸡蛋加多了，这单我不能收！"
+        : wrong
+          ? "这配料和我说的好像不太一样……"
+          : perfect
+            ? "老板，这口绝了！明天还来。"
+            : satisfaction < 55
+              ? "早高峰要赶不上了……"
+              : "热乎！下回再来一份。";
   return {
     score,
     satisfaction,
     revenue,
+    eggCost,
+    profit,
     perfect,
     wrong,
     feedback,

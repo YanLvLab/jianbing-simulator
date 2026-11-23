@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Customer,
+  EGG_UNIT_COST,
   INGREDIENTS,
   Ingredient,
   LEVELS,
@@ -83,6 +84,8 @@ const formatTime = (s: number) =>
     .padStart(2, "0")}:${Math.floor(Math.max(0, s) % 60)
     .toString()
     .padStart(2, "0")}`;
+const signedYuan = (amount: number) =>
+  `${amount < 0 ? "-" : "+"}¥${Math.abs(amount)}`;
 
 function ticketText(wants: Partial<Record<Ingredient, number>>) {
   return Object.entries(wants)
@@ -113,6 +116,8 @@ function startRun(mode: Mode, level: number, save: Save): Run {
     served: 0,
     missed: 0,
     revenue: 0,
+    eggCostTotal: 0,
+    profit: 0,
     perfect: 0,
     wrong: 0,
     satisfactionTotal: 0,
@@ -554,7 +559,7 @@ export default function App() {
     if (run.pancake.eggs >= 5) newAchievements.add("eggs");
     setSave((s) => ({
       ...s,
-      coins: s.coins + result.revenue,
+      coins: s.coins + result.profit,
       achievements: [...newAchievements],
       cilantroMistakeStreak: cilantroStreak,
       perfectStreak,
@@ -579,6 +584,9 @@ export default function App() {
       served,
       sequence,
       revenue: run.revenue + result.revenue,
+      eggCostTotal:
+        run.eggCostTotal + (run.mode === "free" ? 0 : result.eggCost),
+      profit: run.profit + result.profit,
       perfect: run.perfect + (result.perfect ? 1 : 0),
       wrong: run.wrong + (result.wrong ? 1 : 0),
       satisfactionTotal: run.satisfactionTotal + result.satisfaction,
@@ -1006,7 +1014,10 @@ export default function App() {
             <h2>怎么做一份饼</h2>
             <ol>
               <li>倒面糊，在铁板上按住拖动刮板，尽量摊满圆面。</li>
-              <li>点击鸡蛋，再拖动涂开。可多打蛋，但按订单来。</li>
+              <li>
+                点击鸡蛋，再拖动涂开。每颗鸡蛋成本 ¥{EGG_UNIT_COST}
+                ；多打了顾客拒收，鸡蛋成本照扣。
+              </li>
               <li>盯住火候，在绿色区间翻面。</li>
               <li>点击酱料和配料；加倍要求需要点两次。</li>
               <li>点击「折左边」「折右边」，收住配料后再装袋。</li>
@@ -1300,13 +1311,22 @@ export default function App() {
               )}
               {run.pancake.stage === "egg" && (
                 <>
-                  <p>点击鸡蛋打入；在饼面拖动涂匀。</p>
+                  <p>
+                    {run.mode === "free"
+                      ? "点击鸡蛋，再拖动涂匀。自由练习不扣金币。"
+                      : `按小票打蛋，再拖动涂匀。每颗 ¥${EGG_UNIT_COST}；多打会亏钱。`}
+                  </p>
                   <button
                     className="tool-main"
                     onClick={() => addIngredient("egg")}
                   >
                     <IngredientArt id="egg" /> 打一个鸡蛋{" "}
-                    <small>已打 {run.pancake.eggs}/5</small>
+                    <small>
+                      已打 {run.pancake.eggs}/5 ·{" "}
+                      {run.mode === "free"
+                        ? "练习不扣金币"
+                        : `成本 ¥${run.pancake.eggs * EGG_UNIT_COST}`}
+                    </small>
                   </button>
                 </>
               )}
@@ -1514,7 +1534,9 @@ export default function App() {
                 </div>
                 {run.mode !== "free" && (
                   <p className="result-money">
-                    营业额 +¥{toast.revenue} · 满意度 {toast.satisfaction}%
+                    顾客付款 ¥{toast.revenue} · 鸡蛋成本 -¥{toast.eggCost} ·
+                    净收益 {signedYuan(toast.profit)} · 满意度{" "}
+                    {toast.satisfaction}%
                   </p>
                 )}
                 <button
@@ -1559,6 +1581,10 @@ export default function App() {
                     <strong>¥{run.revenue}</strong>
                   </div>
                   <div>
+                    <small>鸡蛋成本</small>
+                    <strong>-¥{run.eggCostTotal}</strong>
+                  </div>
+                  <div>
                     <small>完成订单</small>
                     <strong>{run.served}</strong>
                   </div>
@@ -1580,8 +1606,8 @@ export default function App() {
                     </strong>
                   </div>
                   <div>
-                    <small>获得金币</small>
-                    <strong>¥{run.revenue}</strong>
+                    <small>净收益 / 金币</small>
+                    <strong>{signedYuan(run.profit)}</strong>
                   </div>
                 </div>
                 {run.mode === "endless" && (

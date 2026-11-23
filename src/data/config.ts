@@ -11,6 +11,7 @@ export type Ingredient =
   | "crispy"
   | "ham"
   | "sesame";
+export const EGG_UNIT_COST = 3;
 export type CustomerKind =
   "worker" | "critic" | "cilantroFan" | "cilantroHater" | "chiliFan";
 export type Customer = {

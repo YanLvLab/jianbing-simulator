@@ -23,12 +23,13 @@ const draw = async () => {
   }
   await page.mouse.up();
 };
-const make = async (addExtra = false) => {
+const make = async (addExtra = false, extraEgg = false) => {
   const ticket = await page.locator(".ticket p").innerText();
   await page.getByRole("button", { name: "倒入面糊", exact: true }).click();
   await draw();
   await click(/下一步：打蛋/);
   await page.locator(".tool-main").click();
+  if (extraEgg) await page.locator(".tool-main").click();
   await draw();
   await click(/下一步：翻面/);
   await page.waitForFunction(
@@ -174,6 +175,26 @@ try {
   if (!(await page.getByRole("button", { name: /早起的邻居/ }).isEnabled()))
     throw new Error("Level 2 lost after reload");
   console.log("PASS: level unlock and coins persisted");
+  const coinsBeforeLoss = Number(
+    (await page.locator(".coin-display").innerText()).match(/-?\d+/)?.[0],
+  );
+  await click(/第一炉烟火/);
+  await make(false, true);
+  const eggResult = await page.locator(".result-card").innerText();
+  if (
+    !eggResult.includes("多放鸡蛋") ||
+    !eggResult.includes("顾客付款 ¥0") ||
+    !eggResult.includes("鸡蛋成本 -¥6") ||
+    !eggResult.includes("净收益 -¥6")
+  )
+    throw new Error(`Extra egg loss was not shown: ${eggResult}`);
+  const coinsAfterLoss = Number(
+    (await page.locator(".coin-display").innerText()).match(/-?\d+/)?.[0],
+  );
+  if (coinsAfterLoss !== coinsBeforeLoss - 6)
+    throw new Error("Extra egg loss did not reduce saved coins");
+  await page.screenshot({ path: "tests/v8-extra-egg-loss.png" });
+  console.log("PASS: extra egg rejected and coin balance fell by ¥6");
   const mobile = await browser.newPage({
     viewport: { width: 390, height: 844 },
     isMobile: true,

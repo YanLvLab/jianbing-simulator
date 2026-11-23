@@ -67,6 +67,13 @@ try {
         !imported.ingredients.includes(id)
       )
         throw new Error(`Old save did not receive base ingredient ${id}`);
+    oldSave.coins = -9;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(oldSave));
+    if (
+      loadSave().coins !== -9 ||
+      importSave(JSON.stringify(oldSave)).coins !== -9
+    )
+      throw new Error("Loss balance did not survive save import and reload");
 
     const order = makeOrder(1, 99, "level", available);
     const exact = newPancake();
@@ -97,7 +104,46 @@ try {
       throw new Error("Wrong topping did not reduce payout");
     if (!wrong.details.some((detail) => detail.includes("多放")))
       throw new Error("Wrong topping was not explained");
-    return { seen: [...seen], correct: correct.revenue, wrong: wrong.revenue };
+    const extraEgg = evaluate(
+      { ...exact, eggs: exact.eggs + 1 },
+      order,
+      0,
+      "level",
+      0,
+      0,
+    );
+    if (
+      correct.eggCost !== exact.eggs * 3 ||
+      correct.profit !== correct.revenue - correct.eggCost ||
+      extraEgg.revenue !== 0 ||
+      extraEgg.profit !== -extraEgg.eggCost ||
+      !extraEgg.details.some((detail) => detail.includes("多放鸡蛋"))
+    )
+      throw new Error("Extra egg did not cause a real monetary loss");
+    const doubleEggOrder = {
+      ...order,
+      wants: { ...order.wants, egg: 2 },
+      price: order.price + 3,
+    };
+    const doubleEgg = evaluate(
+      { ...exact, eggs: 2 },
+      doubleEggOrder,
+      0,
+      "level",
+      0,
+      0,
+    );
+    if (doubleEgg.wrong || doubleEgg.revenue <= 0 || doubleEgg.eggCost !== 6)
+      throw new Error("Requested double egg was wrongly rejected");
+    const freeEgg = evaluate({ ...exact, eggs: 5 }, null, 0, "free", 0, 0);
+    if (freeEgg.profit !== 0 || freeEgg.revenue !== 0)
+      throw new Error("Free practice charged coins");
+    return {
+      seen: [...seen],
+      correct: correct.revenue,
+      wrong: wrong.revenue,
+      extraEggLoss: extraEgg.profit,
+    };
   });
   console.log("PASS: five fillings stay in the order pool", result.seen);
   console.log(
@@ -105,6 +151,7 @@ try {
     result.correct,
     result.wrong,
   );
+  console.log("PASS: extra egg creates loss", result.extraEggLoss);
 } finally {
   await browser.close();
 }
